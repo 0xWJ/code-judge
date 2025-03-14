@@ -97,8 +97,9 @@ class Worker(Process):
             _, payload_json = redis_queue.block_pop(app_config.REDIS_WORK_QUEUE_NAME)
             payload = WorkPayload.model_validate_json(payload_json)
             lifetime = time() - payload.timestamp
-            if lifetime >= app_config.MAX_QUEUE_WAIT_TIME:
-                logger.warning(f'Work {payload.submission.sub_id} timed out ({lifetime:.2f}). Ignored. Concurrency is too hight?')
+            if lifetime >= app_config.MAX_QUEUE_WORK_LIFE_TIME:
+                logger.warning(f'Work {payload.submission.sub_id} life time ({lifetime:.2f} > {app_config.MAX_QUEUE_WORK_LIFE_TIME}) timed out. '
+                               f'Ignored. Concurrency is too hight?')
                 continue
             result = judge(payload.submission)
             result_queue_name = f'{app_config.REDIS_RESULT_PREFIX}{payload.work_id}'
