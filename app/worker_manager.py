@@ -95,11 +95,6 @@ class Worker(Process):
     def _run_loop(self):
         redis_queue = connect_queue(False)
         worker_id = str(uuid.uuid4())
-        redis_queue.set(
-            f'{app_config.REDIS_WORKER_ID_PREFIX}:{worker_id}',
-            '1',
-            app_config.REDIS_WORKER_REGISTER_TIMEOUT
-        )
         # warm up the connection
         for _ in range(10):
             time_offset = redis_queue.time() - time()
@@ -111,11 +106,14 @@ class Worker(Process):
         while True:
             # register worker id
             redis_queue.set(
-                f'{app_config.REDIS_WORKER_ID_PREFIX}:{worker_id}',
+                f'{app_config.REDIS_WORKER_ID_PREFIX}{worker_id}',
                 '1',
-                app_config.REDIS_WORKER_REGISTER_TIMEOUT
+                app_config.REDIS_WORKER_REGISTER_EXPIRE
             )
-            _, payload_json = redis_queue.block_pop(app_config.REDIS_WORK_QUEUE_NAME)
+            work_item = redis_queue.block_pop(app_config.REDIS_WORK_QUEUE_NAME, app_config.REDIS_WORK_QUEUE_BLOCK_TIMEOUT)
+            if not work_item:
+                continue
+            _, payload_json = work_item
             payload = WorkPayload.model_validate_json(payload_json)
             lifetime = time() - payload.timestamp
             if lifetime >= app_config.MAX_QUEUE_WORK_LIFE_TIME:

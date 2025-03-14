@@ -36,7 +36,7 @@ class WorkerCounter:
     async def get_worker_count(self):
         now = time()
         if now - self.last_update > self.check_interval or self.n_workers == 0:
-            self.n_workers = await redis_queue.count_keys(app_config.REDIS_WORKER_ID_PREFIX)
+            self.n_workers = await redis_queue.count_keys(f'{app_config.REDIS_WORKER_ID_PREFIX}*')
             self.last_update = now
         return self.n_workers
 

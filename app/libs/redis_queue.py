@@ -112,6 +112,7 @@ class RedisQueue:
 
     async def count_keys(self, pattern):
         assert self.is_async, "count_keys is only available in async mode"
-        return sum(
-            1 for _ in await self.redis.scan_iter(pattern, count=100)
-        )
+        count = 0
+        async for _ in self.redis.scan_iter(pattern, count=100):
+            count += 1
+        return count

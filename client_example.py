@@ -59,6 +59,19 @@ def _judge_batch(url: str, submissions: list[Submission], timeout: int) -> list[
 
     batch_submission = BatchSubmission(submissions=submissions)
     try:
+        while True:
+            response = requests.get(
+                f'{url}/status'
+            )
+            if response.status_code == 200:
+                result = response.json()
+                if result['queue'] > result['num_workers']:
+                    logger.warning(f'Service is too busy: Queue length({result["queue"]}, workers({result["num_workers"]}).')
+                    logger.warning(f'Will sleep for {timeout} seconds to reduce concurrency.')
+                    sleep(10)  # Sleep for a short time before retrying
+                    continue
+            break
+
         response = requests.post(
             f'{url}/judge/batch',
             json=asdict(batch_submission),
