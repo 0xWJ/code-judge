@@ -4,6 +4,7 @@ import threading
 from time import sleep, time
 from pathlib import Path
 import json
+import uuid
 from dataclasses import asdict
 import traceback
 
@@ -93,6 +94,12 @@ def judge(sub: Submission):
 class Worker(Process):
     def _run_loop(self):
         redis_queue = connect_queue(False)
+        worker_id = str(uuid.uuid4())
+        redis_queue.set(
+            f'{app_config.REDIS_WORKER_ID_PREFIX}:{worker_id}',
+            '1',
+            app_config.REDIS_WORKER_REGISTER_TIMEOUT
+        )
         # warm up the connection
         for _ in range(10):
             time_offset = redis_queue.time() - time()
@@ -100,7 +107,14 @@ class Worker(Process):
             logger.warning(f'Clock skew detected: {time_offset:.2f} seconds. '
                            f'This may cause issues with timeouts.'
                            f'Please make sure MAX_QUEUE_WORK_LIFE_TIME{app_config.MAX_QUEUE_WORK_LIFE_TIME} is large enough.')
+
         while True:
+            # register worker id
+            redis_queue.set(
+                f'{app_config.REDIS_WORKER_ID_PREFIX}:{worker_id}',
+                '1',
+                app_config.REDIS_WORKER_REGISTER_TIMEOUT
+            )
             _, payload_json = redis_queue.block_pop(app_config.REDIS_WORK_QUEUE_NAME)
             payload = WorkPayload.model_validate_json(payload_json)
             lifetime = time() - payload.timestamp

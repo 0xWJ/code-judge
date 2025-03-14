@@ -27,6 +27,20 @@ if app_config.RUN_WORKERS:
     worker_manager.run_background()
 
 
+class WorkerCounter:
+    def __init__(self):
+        self.last_update = 0
+        self.n_workers = 0
+        self.check_interval = 120 # 2 minutes
+
+    async def get_worker_count(self):
+        now = time()
+        if now - self.last_update > self.check_interval or self.n_workers == 0:
+            self.n_workers = await redis_queue.count_keys(app_config.REDIS_WORKER_ID_PREFIX)
+            self.last_update = now
+        return self.n_workers
+
+
 @asynccontextmanager
 async def _set_access_log(_: fastapi.FastAPI):
     logger = logging.getLogger('uvicorn.access')
@@ -50,6 +64,7 @@ async def _set_access_log(_: fastapi.FastAPI):
 
 
 app = fastapi.FastAPI(lifespan=_set_access_log)
+worker_counter = WorkerCounter()
 
 
 @app.get('/ping')
@@ -75,3 +90,11 @@ async def judge(submission: Submission):
 @app.post('/judge/batch')
 async def judge_batch(batch_sub: BatchSubmission):
     return BatchJudgeResult.from_submission_result(await _judge_batch(redis_queue, batch_sub))
+
+
+@app.get('/status')
+async def status():
+    return {
+        'queue': await redis_queue.llen(app_config.REDIS_WORK_QUEUE_NAME),
+        'num_workers': await worker_counter.get_worker_count(),
+    }

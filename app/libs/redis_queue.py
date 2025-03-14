@@ -103,3 +103,15 @@ class RedisQueue:
             return self._time_async()
         else:
             return self._time_sync()
+
+    def llen(self, queue_name):
+        return self.redis.llen(queue_name)
+
+    def set(self, key, value, expire=None):
+        return self.redis.set(key, value, ex=expire)
+
+    async def count_keys(self, pattern):
+        assert self.is_async, "count_keys is only available in async mode"
+        return sum(
+            1 for _ in await self.redis.scan_iter(pattern, count=100)
+        )
