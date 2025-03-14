@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 import logging
+from time import time
 
 import fastapi
 import uvicorn.logging
@@ -19,6 +20,13 @@ import app.config as app_config
 logger = logging.getLogger(__name__)
 
 
+redis_queue = connect_queue(True)
+if app_config.RUN_WORKERS:
+    print('Running workers...')
+    worker_manager =  WorkerManager()
+    worker_manager.run_background()
+
+
 @asynccontextmanager
 async def _set_access_log(_: fastapi.FastAPI):
     logger = logging.getLogger('uvicorn.access')
@@ -29,18 +37,19 @@ async def _set_access_log(_: fastapi.FastAPI):
     )
     old = logger.handlers[0].formatter
     logger.handlers[0].setFormatter(console_formatter)
+
+    # warm up the connection
+    for _ in range(10):
+        time_offset = await redis_queue.time() - time()
+    if abs(time_offset) > 1:
+        logger.warning(f'Clock skew detected: {time_offset:.2f} seconds. '
+                       f'This may cause issues with timeouts.'
+                       f'Please make sure MAX_QUEUE_WORK_LIFE_TIME{app_config.MAX_QUEUE_WORK_LIFE_TIME} is large enough.')
     yield
     logger.handlers[0].setFormatter(old)
 
 
 app = fastapi.FastAPI(lifespan=_set_access_log)
-
-
-redis_queue = connect_queue(True)
-if app_config.RUN_WORKERS:
-    print('Running workers...')
-    worker_manager =  WorkerManager()
-    worker_manager.run_background()
 
 
 @app.get('/ping')

@@ -35,6 +35,9 @@ class RedisQueue:
             socket_keepalive_options={socket.TCP_KEEPIDLE: 2, socket.TCP_KEEPINTVL: 1, socket.TCP_KEEPCNT: 2}
         )
 
+    def ping(self):
+        return self.redis.ping()
+
     def push(self, queue_name, value):
         return self.redis.rpush(queue_name, value)
 
@@ -86,3 +89,17 @@ class RedisQueue:
 
     def delete(self, key):
         return self.redis.delete(key)
+
+    def _time_sync(self) -> float:
+        t = self.redis.time()
+        return t[0] + t[1] / 1_000_000
+
+    async def _time_async(self) -> float:
+        t = await self.redis.time()
+        return t[0] + t[1] / 1_000_000
+
+    def time(self) -> float | Awaitable[float]:
+        if self.is_async:
+            return self._time_async()
+        else:
+            return self._time_sync()

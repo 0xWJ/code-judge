@@ -93,12 +93,19 @@ def judge(sub: Submission):
 class Worker(Process):
     def _run_loop(self):
         redis_queue = connect_queue(False)
+        # warm up the connection
+        for _ in range(10):
+            time_offset = redis_queue.time() - time()
+        if abs(time_offset) > 1:
+            logger.warning(f'Clock skew detected: {time_offset:.2f} seconds. '
+                           f'This may cause issues with timeouts.'
+                           f'Please make sure MAX_QUEUE_WORK_LIFE_TIME{app_config.MAX_QUEUE_WORK_LIFE_TIME} is large enough.')
         while True:
             _, payload_json = redis_queue.block_pop(app_config.REDIS_WORK_QUEUE_NAME)
             payload = WorkPayload.model_validate_json(payload_json)
             lifetime = time() - payload.timestamp
             if lifetime >= app_config.MAX_QUEUE_WORK_LIFE_TIME:
-                logger.warning(f'Work {payload.submission.sub_id} life time ({lifetime:.2f} > {app_config.MAX_QUEUE_WORK_LIFE_TIME}) timed out. '
+                logger.warning(f'Work {payload.submission.sub_id} lifetime ({lifetime:.2f}>{app_config.MAX_QUEUE_WORK_LIFE_TIME}) timed out. '
                                f'Ignored. Concurrency is too hight?')
                 continue
             result = judge(payload.submission)
