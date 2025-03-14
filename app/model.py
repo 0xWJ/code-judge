@@ -1,6 +1,7 @@
 from enum import Enum
 from typing import Literal
 import uuid
+from time import time
 
 from pydantic import BaseModel, Field
 
@@ -77,7 +78,9 @@ class BatchJudgeResult(BaseModel):
 
 class WorkPayload(BaseModel):
     work_id: str | None = None
+    timestamp: float | None = None
     submission: Submission | BatchSubmission = Field(..., discriminator='type')
 
     def model_post_init(self, __context):
         self.work_id = self.work_id or str(uuid.uuid4())
+        self.timestamp = self.timestamp or time()
