@@ -36,7 +36,7 @@ class SubmissionResult:
 
 @dataclass
 class BatchSubmission:
-    type: Literal['batch'] = 'batch'
+    type: Literal['batch']
     submissions: list[Submission]
 
 
@@ -53,23 +53,32 @@ class BatchSubmissionResult:
         )
 
 
+def _get_status(url: str, timeout: int) -> dict:
+    try:
+        response = requests.get(
+            f'{url}/status',
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        logger.exception(f'Failed to get status from {url}')
+        return {'queue': 0, 'num_workers': 0}
+
+
 def _judge_batch(url: str, submissions: list[Submission], timeout: int) -> list[SubmissionResult]:
     if not submissions:
         return []
 
-    batch_submission = BatchSubmission(submissions=submissions)
+    batch_submission = BatchSubmission(submissions=submissions, type='batch')
     try:
         while True:
-            response = requests.get(
-                f'{url}/status'
-            )
-            if response.status_code == 200:
-                result = response.json()
-                if result['queue'] > result['num_workers']:
-                    logger.warning(f'Service is too busy: Queue length({result["queue"]}, workers({result["num_workers"]}).')
-                    logger.warning(f'Will sleep for {timeout} seconds to reduce concurrency.')
-                    sleep(10)  # Sleep for a short time before retrying
-                    continue
+            result = _get_status(url, timeout)
+            if result['queue'] > result['num_workers']:
+                logger.warning(f'Service is too busy: Queue length({result["queue"]}, workers({result["num_workers"]}).')
+                logger.warning(f'Will sleep for {timeout} seconds to reduce concurrency.')
+                sleep(10)  # Sleep for a short time before retrying
+                continue
             break
 
         response = requests.post(
@@ -84,7 +93,7 @@ def _judge_batch(url: str, submissions: list[Submission], timeout: int) -> list[
         )
         if n_queue_timeouts > 0:
             # TODO: Implement exponential backoff?
-            sleep_time = min(60, random.random() * n_queue_timeouts * n_queue_timeouts / len(submissions) * 20)
+            sleep_time = 10 * n_queue_timeouts
             logger.warning(f'Got {n_queue_timeouts} of {len(submissions)} queue timeouts. '
                            f'Will sleep for {sleep_time} seconds to reduce concurrency.')
             sleep(sleep_time)
@@ -98,12 +107,12 @@ def _judge_batch(url: str, submissions: list[Submission], timeout: int) -> list[
 
 
 class JudgeClient:
-    def __init__(self, url, *, batch_size=10, timeout=20, max_concurrent=10):
+    def __init__(self, url, *, batch_size=10, timeout=20):
         self.url = url
         self.timeout = timeout
         self.batch_size = batch_size
-        self.max_concurrent = max_concurrent
-        self.executor = ProcessPoolExecutor(max_workers=max_concurrent)
+        self.max_concurrent = _get_status(url, timeout)['num_workers'] // batch_size
+        self.executor = ProcessPoolExecutor(max_workers=self.max_concurrent)
 
     def judge(
             self,
