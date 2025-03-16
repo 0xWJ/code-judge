@@ -11,6 +11,7 @@ MAX_STDOUT_ERROR_LENGTH = int(env('MAX_STDOUT_ERROR_LENGTH', 1000))
 # default 15 seconds
 # additional 5 seconds for communication between judge server and judge worker
 MAX_QUEUE_WAIT_TIME = int(env('MAX_QUEUE_WAIT_TIME', MAX_EXECUTION_TIME + 5))
+LONG_BATCH_MAX_QUEUE_WAIT_TIME = int(env('LONG_BATCH_MAX_QUEUE_WAIT_TIME', 60*60))  # default 1 hour
 MAX_QUEUE_WORK_LIFE_TIME = int(env('MAX_QUEUE_WORK_LIFE_TIME', 4))  # default 4s
 MAX_MEMORY = int(env('MAX_MEMORY', 256))  # default 256 MB
 MAX_WORKERS = int(env('MAX_WORKERS', os.cpu_count())) or os.cpu_count()  # default os.cpu_count()
@@ -29,6 +30,7 @@ if not REDIS_URI:
 REDIS_KEY_PREFIX = env('REDIS_KEY_PREFIX', 'js')
 REDIS_RESULT_PREFIX = env('REDIS_RESULT_QUEUE_PREFIX', f'{REDIS_KEY_PREFIX}:{version}:result-queue:')
 REDIS_RESULT_EXPIRE = int(env('REDIS_RESULT_EXPIRE', 60))  # default 1 minute
+REDIS_RESULT_LONG_BATCH_EXPIRE = int(env('REDIS_RESULT_LONG_BATCH_EXPIRE', LONG_BATCH_MAX_QUEUE_WAIT_TIME))  # default 1 hour
 REDIS_WORK_QUEUE_NAME = env('WORK_QUEUE_NAME', f'{REDIS_KEY_PREFIX}:{version}:work-queue')
 
 # default 15 seconds

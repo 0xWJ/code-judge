@@ -3,6 +3,7 @@ from time import time
 import asyncio
 
 import app.config as app_config
+from app.libs.redis_queue import RedisQueue
 from app.libs.utils import chunkify
 from app.model import (
     Submission,
@@ -17,7 +18,7 @@ from app.model import (
 logger = logging.getLogger(__name__)
 
 
-def _to_result(submission: Submission, start_time, result_json):
+def _to_result(submission: Submission, start_time: float, result_json: tuple[str, bytes] | None):
     if result_json is None: # timeout
         return SubmissionResult(sub_id=submission.sub_id, success=False, cost=time() - start_time, reason=ResultReason.QUEUE_TIMEOUT)
     else:
@@ -27,7 +28,7 @@ def _to_result(submission: Submission, start_time, result_json):
         return result
 
 
-async def judge(redis_queue, submission: Submission):
+async def judge(redis_queue: RedisQueue, submission: Submission):
     start_time = time()
     try:
         payload = WorkPayload(submission=submission)
@@ -42,55 +43,76 @@ async def judge(redis_queue, submission: Submission):
         return SubmissionResult(sub_id=submission.sub_id, success=False, cost=time() - start_time, reason=ResultReason.INTERNAL_ERROR)
 
 
-async def _judge_batch_impl(redis_queue, subs: list[Submission]):
+async def _judge_batch_impl(redis_queue: RedisQueue, subs: list[Submission], long_batch=False):
     start_time = time()
-    chunks = list(chunkify(subs, app_config.MAX_BATCH_CHUNK_SIZE))
-    payload_chunks = [
-        [WorkPayload(submission=sub) for sub in chunk]
-        for chunk in chunks
-    ]
+    max_wait_time = app_config.LONG_BATCH_MAX_QUEUE_WAIT_TIME \
+        if long_batch else app_config.MAX_QUEUE_WAIT_TIME
+    payloads = [WorkPayload(submission=sub, long_running=long_batch) for sub in subs]
+    payload_chunks = list(chunkify(payloads, app_config.MAX_BATCH_CHUNK_SIZE))
 
-    async def _submit(payload: WorkPayload):
-        payload_json = payload.model_dump_json()
-        await redis_queue.push(app_config.REDIS_WORK_QUEUE_NAME, payload_json)
+    async def _submit(payloads: list[WorkPayload]):
+        payload_jsons = [payload.model_dump_json() for payload in payloads]
+        await redis_queue.push(app_config.REDIS_WORK_QUEUE_NAME, *payload_jsons)
 
-    async def _get_result(payload: WorkPayload, max_wait_time):
-        """max_wait_time <= 0 means no wait (which is different from block_pop)"""
-        result_queue_name = f'{app_config.REDIS_RESULT_PREFIX}{payload.work_id}'
-        if max_wait_time > 0:
-            result_json = await redis_queue.block_pop(result_queue_name, max_wait_time)
-        else:
-            # no wait
-            result_json = await redis_queue.pop(result_queue_name)
-            if result_json is not None:
-                # align with block_pop, which will return a pair of result queue name and result json when success
-                result_json = result_queue_name, result_json
-        await redis_queue.delete(result_queue_name)
-        return _to_result(payload.submission, start_time, result_json)
+    async def _get_result(payloads: list[WorkPayload], max_chunk_wait_time):
+        """max_chunk_wait_time <= 0 means no wait (which is different from block_pop)"""
+        result_queue_names = {
+            f'{app_config.REDIS_RESULT_PREFIX}{payload.work_id}': payload
+            for payload in payloads
+        }
+        results = {}
+        result_start_time = time()
+        left_time = max_chunk_wait_time
+        left_result_queue_names = list(result_queue_names.keys())
+
+        while left_result_queue_names and left_time > 0:
+            # try to pop all results
+            # first try to pop all results in one go
+            results = await redis_queue.pop_multi(*left_result_queue_names)
+            name_results = [(k, v) for k, v in zip(left_result_queue_names, results) if v is not None]
+            if not name_results:
+                # if no results are popped, block pop the first result
+                name_result = await redis_queue.block_pop(*left_result_queue_names, timeout=max_chunk_wait_time)
+                if name_result is not None:
+                    name_results.append(name_result)
+
+            if not name_results:
+                # timeout, no results are ready. break the loop
+                left_time = 0
+                break
+
+            for name_result in name_results:
+                result_queue_name, _ = name_result
+                payload = result_queue_names[result_queue_name]
+                results[result_queue_name] = _to_result(payload.submission, start_time, name_result)
+                left_result_queue_names.remove(result_queue_name)
+
+            left_time = max_chunk_wait_time - int(time() - result_start_time)
+
+        # fill non-ready work as timeout
+        for result_queue_name in left_result_queue_names:
+            results[result_queue_name] = _to_result(result_queue_names[result_queue_name].submission, start_time, None)
+
+        await redis_queue.delete(*result_queue_names)
+        return [results[result_queue_name] for result_queue_name in result_queue_names]
 
     # submit all submissions to the queue
     for chunk in payload_chunks:
-        await asyncio.gather(*[_submit(pl) for pl in chunk])
+        await _submit(chunk)
 
     results = []
-    max_wait_time = app_config.MAX_QUEUE_WAIT_TIME
     wait_start_time = time()
     for chunk in payload_chunks:
         # get all results from the queue
-        left_time = int(max_wait_time - (time() - wait_start_time))
-        chunk_results = await asyncio.gather(*[_get_result(pl, left_time) for pl in chunk])
+        left_time = max_wait_time - int(time() - wait_start_time)
+        chunk_results = _get_result(chunk, left_time)
         results.extend(chunk_results)
     return results
 
 
-async def judge_batch(redis_queue, batch_sub: BatchSubmission):
+async def judge_batch(redis_queue: RedisQueue, batch_sub: BatchSubmission, long_batch=False):
     try:
-        if not app_config.MAX_BATCH_CHUNK_SIZE:
-            return BatchSubmissionResult(
-                sub_id=batch_sub.sub_id,
-                results=await asyncio.gather(*[judge(redis_queue, sub) for sub in batch_sub.submissions])
-            )
-        results = await _judge_batch_impl(redis_queue, batch_sub.submissions)
+        results = await _judge_batch_impl(redis_queue, batch_sub.submissions, long_batch)
     except Exception:
         logger.exception(f'Failed to judge batch submission {batch_sub.sub_id}')
         results=[

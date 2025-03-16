@@ -67,6 +67,11 @@ async def run_batch(batch_sub: BatchSubmission):
     return await _judge_batch(redis_queue, batch_sub)
 
 
+@app.post('/run/long-batch')
+async def run_long_batch(batch_sub: BatchSubmission):
+    return await _judge_batch(redis_queue, batch_sub, long_batch=True)
+
+
 @app.post('/judge')
 async def judge(submission: Submission):
     return JudgeResult.from_submission_result(await _judge(redis_queue, submission))
@@ -75,3 +80,8 @@ async def judge(submission: Submission):
 @app.post('/judge/batch')
 async def judge_batch(batch_sub: BatchSubmission):
     return BatchJudgeResult.from_submission_result(await _judge_batch(redis_queue, batch_sub))
+
+
+@app.post('/judge/long-batch')
+async def judge_batch(batch_sub: BatchSubmission):
+    return BatchJudgeResult.from_submission_result(await _judge_batch(redis_queue, batch_sub, long_batch=True))

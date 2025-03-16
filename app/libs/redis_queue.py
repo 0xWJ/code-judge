@@ -38,13 +38,21 @@ class RedisQueue:
     def ping(self):
         return self.redis.ping()
 
-    def push(self, queue_name, value):
-        return self.redis.rpush(queue_name, value)
+    def push(self, queue_name, *values):
+        return self.redis.rpush(queue_name, values)
 
     def pop(self, queue_name):
         return self.redis.lpop(queue_name)
 
-    def _block_pop_sync(self, queue_name, timeout=0) -> tuple[str, bytes] | None:
+    def pop_multi(self, *queue_names):
+        if not queue_names:
+            return []
+        pp = self.redis.pipeline(transaction=False)
+        for queue_name in queue_names:
+            pp.lpop(queue_name)
+        return pp.execute()
+
+    def _block_pop_sync(self, *queue_names, timeout=0) -> tuple[str, bytes] | None:
         start = time()
         while True:
             if timeout > 0:
@@ -54,14 +62,14 @@ class RedisQueue:
             else:
                 effective_timeout = 0
             try:
-                result = self.redis.blpop(queue_name, timeout=effective_timeout)
+                result = self.redis.blpop(queue_names, timeout=effective_timeout)
                 if result:
                     return result
             except redis.exceptions.TimeoutError:
                 continue
         return None
 
-    async def _block_pop_async(self, queue_name, timeout=0) -> tuple[str, bytes] | None:
+    async def _block_pop_async(self, *queue_names, timeout=0) -> tuple[str, bytes] | None:
         start = time()
         while True:
             if timeout > 0:
@@ -71,24 +79,24 @@ class RedisQueue:
             else:
                 effective_timeout = 0
             try:
-                result = await self.redis.blpop(queue_name, timeout=effective_timeout)
+                result = await self.redis.blpop(queue_names, timeout=effective_timeout)
                 if result:
                     return result
             except redis.exceptions.TimeoutError:
                 continue
         return None
 
-    def block_pop(self, queue_name, timeout=0) -> tuple[str, bytes] | None | Awaitable[tuple[str, bytes]] | Awaitable[None]:
+    def block_pop(self, *queue_names, timeout=0) -> tuple[str, bytes] | None | Awaitable[tuple[str, bytes]] | Awaitable[None]:
         if self.is_async:
-            return self._block_pop_async(queue_name, timeout)
+            return self._block_pop_async(*queue_names, timeout=timeout)
         else:
-            return self._block_pop_sync(queue_name, timeout)
+            return self._block_pop_sync(*queue_names, timeout=timeout)
 
     def expire(self, key, timeout):
         return self.redis.expire(key, timeout)
 
-    def delete(self, key):
-        return self.redis.delete(key)
+    def delete(self, *keys):
+        return self.redis.delete(*keys)
 
     def _time_sync(self) -> float:
         t = self.redis.time()

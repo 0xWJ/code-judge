@@ -79,6 +79,7 @@ class BatchJudgeResult(BaseModel):
 class WorkPayload(BaseModel):
     work_id: str | None = None
     timestamp: float | None = None
+    long_running: bool = False
     submission: Submission | BatchSubmission = Field(..., discriminator='type')
 
     def model_post_init(self, __context):
