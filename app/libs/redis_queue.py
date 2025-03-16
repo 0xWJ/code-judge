@@ -39,7 +39,7 @@ class RedisQueue:
         return self.redis.ping()
 
     def push(self, queue_name, *values):
-        return self.redis.rpush(queue_name, values)
+        return self.redis.rpush(queue_name, *values)
 
     def pop(self, queue_name):
         return self.redis.lpop(queue_name)

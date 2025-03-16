@@ -68,13 +68,13 @@ async def _judge_batch_impl(redis_queue: RedisQueue, subs: list[Submission], lon
         while left_result_queue_names and left_time > 0:
             # try to pop all results
             # first try to pop all results in one go
-            results = await redis_queue.pop_multi(*left_result_queue_names)
-            name_results = [(k, v) for k, v in zip(left_result_queue_names, results) if v is not None]
+            step_results = await redis_queue.pop_multi(*left_result_queue_names)
+            name_results = [(k, v) for k, v in zip(left_result_queue_names, step_results) if v is not None]
             if not name_results:
                 # if no results are popped, block pop the first result
                 name_result = await redis_queue.block_pop(*left_result_queue_names, timeout=max_chunk_wait_time)
                 if name_result is not None:
-                    name_results.append(name_result)
+                    name_results.append((name_result[0].decode(), name_result[1]))
 
             if not name_results:
                 # timeout, no results are ready. break the loop
@@ -105,7 +105,7 @@ async def _judge_batch_impl(redis_queue: RedisQueue, subs: list[Submission], lon
     for chunk in payload_chunks:
         # get all results from the queue
         left_time = max_wait_time - int(time() - wait_start_time)
-        chunk_results = _get_result(chunk, left_time)
+        chunk_results = await _get_result(chunk, left_time)
         results.extend(chunk_results)
     return results
 
