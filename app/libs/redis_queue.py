@@ -14,8 +14,8 @@ class RedisQueue:
         self.is_async = is_async
         self.queue_name = queue_name
         self.socket_timeout = socket_timeout
-        if self.socket_timeout is not None and self.socket_timeout < 5:
-            raise ValueError('socket_timeout must be at least 5 seconds')
+        if self.socket_timeout is not None and self.socket_timeout < 10:
+            raise ValueError('socket_timeout must be at least 10 seconds')
         self.redis: redis.Redis | redis.asyncio.Redis = self._init_redis(socket_timeout)
 
     def _init_redis(self, socket_timeout) -> redis.Redis | redis.asyncio.Redis:
@@ -37,6 +37,12 @@ class RedisQueue:
 
     def ping(self):
         return self.redis.ping()
+
+    def set(self, key, value):
+        return self.redis.set(key, value)
+
+    def get(self, key):
+        return self.redis.get(key)
 
     def push(self, queue_name, *values):
         return self.redis.rpush(queue_name, *values)
@@ -60,13 +66,11 @@ class RedisQueue:
                 if effective_timeout <= 0:
                     break
             else:
-                effective_timeout = 0
-            try:
-                result = self.redis.blpop(queue_names, timeout=effective_timeout)
-                if result:
-                    return result
-            except redis.exceptions.TimeoutError:
-                continue
+                effective_timeout = self.socket_timeout
+            effective_timeout = min(effective_timeout, self.socket_timeout - 2)  # 2 seconds for communication overhead
+            result = self.redis.blpop(queue_names, timeout=effective_timeout)
+            if result:
+                return result
         return None
 
     async def _block_pop_async(self, *queue_names, timeout=0) -> tuple[str, bytes] | None:
@@ -77,13 +81,11 @@ class RedisQueue:
                 if effective_timeout <= 0:
                     break
             else:
-                effective_timeout = 0
-            try:
-                result = await self.redis.blpop(queue_names, timeout=effective_timeout)
-                if result:
-                    return result
-            except redis.exceptions.TimeoutError:
-                continue
+                effective_timeout = self.socket_timeout
+            result = await self.redis.blpop(queue_names, timeout=effective_timeout)
+            effective_timeout = min(effective_timeout, self.socket_timeout - 2)  # 2 seconds for communication overhead
+            if result:
+                return result
         return None
 
     def block_pop(self, *queue_names, timeout=0) -> tuple[str, bytes] | None | Awaitable[tuple[str, bytes]] | Awaitable[None]:
@@ -111,3 +113,9 @@ class RedisQueue:
             return self._time_async()
         else:
             return self._time_sync()
+
+    def llen(self, queue_name):
+        return self.redis.llen(queue_name)
+
+    def lrange(self, queue_name, start=0, end=-1):
+        return self.redis.lrange(queue_name, start, end)

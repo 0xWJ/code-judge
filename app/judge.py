@@ -59,6 +59,23 @@ async def _judge_batch_impl(redis_queue: RedisQueue, subs: list[Submission], lon
         payload_jsons = [payload.model_dump_json() for payload in payloads]
         await redis_queue.push(app_config.REDIS_WORK_QUEUE_NAME, *payload_jsons)
 
+    async def _sync_pop(queue_names: list[str]):
+        step_results = await redis_queue.pop_multi(*queue_names)
+        name_results = [(k, v) for k, v in zip(queue_names, step_results) if v is not None]
+        return name_results
+
+    async def _async_pop(queue_names: list[str], timeout: int):
+        name_result = await redis_queue.block_pop(*queue_names, timeout=timeout)
+        if name_result is not None:
+            return [(name_result[0].decode(), name_result[1])]
+        return []
+
+    async def _pop_results(queue_names: list[str], timeout: int):
+        name_results = await _sync_pop(queue_names)
+        if not name_results and timeout > 0:
+            name_results = await _async_pop(queue_names, min(timeout, app_config.MAX_QUEUE_WAIT_TIME))
+        return name_results
+
     async def _get_result(payloads: list[WorkPayload], max_chunk_wait_time):
         """max_chunk_wait_time <= 0 means no wait (which is different from block_pop)"""
         result_queue_names = {
@@ -68,23 +85,32 @@ async def _judge_batch_impl(redis_queue: RedisQueue, subs: list[Submission], lon
         results = {}
         result_start_time = time()
         left_time = max_chunk_wait_time
+        start_working_time = 0
         left_result_queue_names = list(result_queue_names.keys())
 
-        while left_result_queue_names and left_time > 0:
-            # try to pop all results
-            # first try to pop all results in one go
-            step_results = await redis_queue.pop_multi(*left_result_queue_names)
-            name_results = [(k, v) for k, v in zip(left_result_queue_names, step_results) if v is not None]
-            if not name_results:
-                # if no results are popped, block pop the first result
-                name_result = await redis_queue.block_pop(*left_result_queue_names, timeout=max_chunk_wait_time)
-                if name_result is not None:
-                    name_results.append((name_result[0].decode(), name_result[1]))
-
-            if not name_results:
-                # timeout, no results are ready. break the loop
-                left_time = 0
-                break
+        while left_result_queue_names:
+            min_timestamp = min(
+                result_queue_names[result_queue_name].timestamp
+                for result_queue_name in left_result_queue_names
+            )
+            name_results = await _pop_results(left_result_queue_names, left_time)
+            if not name_results: # if no result, check if timeout
+                if start_working_time == 0:
+                    next_payload_json = await redis_queue.lrange(app_config.REDIS_WORK_QUEUE_NAME, 0, 0)
+                    if not next_payload_json:
+                        start_working_time = time()
+                    else:
+                        next_payload = WorkPayload.model_validate_json(next_payload_json[0])
+                        if next_payload.timestamp > min_timestamp:
+                            logger.info('set start_working_time')
+                            start_working_time = time()
+                else:
+                    if time() - start_working_time > app_config.MAX_QUEUE_WAIT_TIME:
+                        logger.warning(f'No result for {len(left_result_queue_names)} submissions. '
+                                       f'Assuming all submissions are timed out.')
+                        break
+            else:
+                start_working_time = 0
 
             for name_result in name_results:
                 result_queue_name, _ = name_result
@@ -93,6 +119,8 @@ async def _judge_batch_impl(redis_queue: RedisQueue, subs: list[Submission], lon
                 left_result_queue_names.remove(result_queue_name)
 
             left_time = max_chunk_wait_time - int(time() - result_start_time)
+            if left_time <= 0:
+                break
 
         # fill non-ready work as timeout
         for result_queue_name in left_result_queue_names:

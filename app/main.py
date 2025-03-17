@@ -38,6 +38,16 @@ async def _set_access_log(_: fastapi.FastAPI):
     old = logger.handlers[0].formatter
     logger.handlers[0].setFormatter(console_formatter)
 
+    logger = logging.getLogger('app')
+    logger.setLevel(logging.INFO)
+    handler = logging.StreamHandler()
+    handler.setLevel(logging.INFO)
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
     # warm up the connection
     for _ in range(10):
         time_offset = await redis_queue.time() - time()

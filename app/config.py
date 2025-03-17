@@ -19,7 +19,7 @@ MAX_WORKERS = int(env('MAX_WORKERS', os.cpu_count())) or os.cpu_count()  # defau
 RUN_WORKERS = int(env('RUN_WORKERS', 0))  # default 0, which means run workers in a separate process
 
 MAX_BATCH_CHUNK_SIZE = int(env('MAX_BATCH_CHUNK_SIZE', 2))  # 0 means no limit
-MAX_LONG_BATCH_CHUNK_SIZE = int(env('MAX_LONG_BATCH_CHUNK_SIZE', 500))
+MAX_LONG_BATCH_CHUNK_SIZE = int(env('MAX_LONG_BATCH_CHUNK_SIZE', 100))
 
 PYTHON_EXECUTOR_PATH = env('PYTHON_EXECUTOR_PATH', 'python3')
 CPP_COMPILER_PATH = env('CPP_COMPILER_PATH', 'g++')
@@ -36,4 +36,4 @@ REDIS_WORK_QUEUE_NAME = env('WORK_QUEUE_NAME', f'{REDIS_KEY_PREFIX}:{version}:wo
 
 # default 15 seconds
 # additional 5 seconds for communication between judge server and judge worker
-REDIS_SOCKET_TIMEOUT = int(env('REDIS_SOCKET_TIMEOUT', MAX_EXECUTION_TIME + 5))
+REDIS_SOCKET_TIMEOUT = int(env('REDIS_SOCKET_TIMEOUT', 60)) # default 1 minute
