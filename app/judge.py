@@ -1,6 +1,7 @@
 import logging
 from time import time
 import asyncio
+import uuid
 
 import app.config as app_config
 from app.libs.redis_queue import RedisQueue
@@ -47,8 +48,12 @@ async def _judge_batch_impl(redis_queue: RedisQueue, subs: list[Submission], lon
     start_time = time()
     max_wait_time = app_config.LONG_BATCH_MAX_QUEUE_WAIT_TIME \
         if long_batch else app_config.MAX_QUEUE_WAIT_TIME
-    payloads = [WorkPayload(submission=sub, long_running=long_batch) for sub in subs]
-    payload_chunks = list(chunkify(payloads, app_config.MAX_BATCH_CHUNK_SIZE))
+    batch_chunk_size = app_config.MAX_LONG_BATCH_CHUNK_SIZE \
+        if long_batch else app_config.MAX_BATCH_CHUNK_SIZE
+    # use a hash tag to make sure all payloads are in the same slot in redis cluster
+    hash_tag = '{' + str(uuid.uuid4()) + '}'
+    payloads = [WorkPayload(work_id=f'{hash_tag}:{idx}', submission=sub, long_running=long_batch) for idx, sub in enumerate(subs)]
+    payload_chunks = list(chunkify(payloads, batch_chunk_size))
 
     async def _submit(payloads: list[WorkPayload]):
         payload_jsons = [payload.model_dump_json() for payload in payloads]

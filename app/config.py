@@ -19,6 +19,7 @@ MAX_WORKERS = int(env('MAX_WORKERS', os.cpu_count())) or os.cpu_count()  # defau
 RUN_WORKERS = int(env('RUN_WORKERS', 0))  # default 0, which means run workers in a separate process
 
 MAX_BATCH_CHUNK_SIZE = int(env('MAX_BATCH_CHUNK_SIZE', 2))  # 0 means no limit
+MAX_LONG_BATCH_CHUNK_SIZE = int(env('MAX_LONG_BATCH_CHUNK_SIZE', 500))
 
 PYTHON_EXECUTOR_PATH = env('PYTHON_EXECUTOR_PATH', 'python3')
 CPP_COMPILER_PATH = env('CPP_COMPILER_PATH', 'g++')
