@@ -119,10 +119,12 @@ class Worker(Process):
             payload = None
             result = None
             result_queue_name = None
+            long_running = False
             try:
                 payload = WorkPayload.model_validate_json(payload_json)
+                long_running = payload.long_running
                 result_queue_name = f'{app_config.REDIS_RESULT_PREFIX}{payload.work_id}'
-                if not payload.long_running and (lifetime := time() - payload.timestamp) >= app_config.MAX_QUEUE_WORK_LIFE_TIME:
+                if not long_running and (lifetime := time() - payload.timestamp) >= app_config.MAX_QUEUE_WORK_LIFE_TIME:
                     logger.warning(f'Work {payload.work_id} lifetime ({lifetime:.2f}>{app_config.MAX_QUEUE_WORK_LIFE_TIME}) timed out. '
                                 f'Ignored. Concurrency is too hight?')
                     continue
@@ -133,9 +135,11 @@ class Worker(Process):
                     payload_dict = json.load(payload_json)
                     work_id = payload_dict.get('work_id')
                     sub_id = payload_dict.get('submission', {}).get('sub_id')
+                    long_running = payload_dict.get('long_running', False)
                 except Exception:
                     work_id = None
                     sub_id = None
+                    long_running = False
                 if work_id and sub_id:
                     result_queue_name = f'{app_config.REDIS_RESULT_PREFIX}{work_id}'
                     result = SubmissionResult(
@@ -150,6 +154,7 @@ class Worker(Process):
             except Exception:
                 logger.exception(f'Worker failed to process work item {payload_json}')
                 if payload is not None and result_queue_name is not None:
+                    long_running = payload.long_running
                     result = SubmissionResult(
                         sub_id=payload.submission.sub_id,
                         success=False,
@@ -159,11 +164,12 @@ class Worker(Process):
                 else:
                     logger.error(f'Failed to process work item {payload_json}')
                     continue
+
             redis_queue.push(result_queue_name, result.model_dump_json())
             redis_queue.expire(
                 result_queue_name,
                 app_config.REDIS_RESULT_EXPIRE
-                    if not payload.long_running
+                    if not long_running
                     else app_config.REDIS_RESULT_LONG_BATCH_EXPIRE
             )
 
