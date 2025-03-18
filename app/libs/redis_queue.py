@@ -38,11 +38,29 @@ class RedisQueue:
     def ping(self):
         return self.redis.ping()
 
-    def set(self, key, value):
-        return self.redis.set(key, value)
+    def set(self, key, value, expire=None):
+        return self.redis.set(key, value, ex=expire)
 
     def get(self, key):
         return self.redis.get(key)
+
+    def _peak_sync(self, queue_name):
+        result = self.redis.lrange(queue_name, 0, 0)
+        if result:
+            return result[0]
+        return None
+
+    async def _peak_async(self, queue_name):
+        result = await self.redis.lrange(queue_name, 0, 0)
+        if result:
+            return result[0]
+        return None
+
+    def peak(self, queue_name) -> bytes | Awaitable[bytes]:
+        if self.is_async:
+            return self._peak_async(queue_name)
+        else:
+            return self._peak_sync(queue_name)
 
     def push(self, queue_name, *values):
         return self.redis.rpush(queue_name, *values)
@@ -117,5 +135,9 @@ class RedisQueue:
     def llen(self, queue_name):
         return self.redis.llen(queue_name)
 
-    def lrange(self, queue_name, start=0, end=-1):
-        return self.redis.lrange(queue_name, start, end)
+    async def count_keys(self, pattern):
+        assert self.is_async, "count_keys is only available in async mode"
+        count = 0
+        async for _ in self.redis.scan_iter(pattern, count=100):
+            count += 1
+        return count

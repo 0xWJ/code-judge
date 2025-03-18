@@ -34,6 +34,12 @@ REDIS_RESULT_EXPIRE = int(env('REDIS_RESULT_EXPIRE', 60))  # default 1 minute
 REDIS_RESULT_LONG_BATCH_EXPIRE = int(env('REDIS_RESULT_LONG_BATCH_EXPIRE', LONG_BATCH_MAX_QUEUE_WAIT_TIME))  # default 1 hour
 REDIS_WORK_QUEUE_NAME = env('WORK_QUEUE_NAME', f'{REDIS_KEY_PREFIX}:{version}:work-queue')
 
+REDIS_WORK_QUEUE_BLOCK_TIMEOUT = int(env('REDIS_WORK_QUEUE_BLOCK_TIMEOUT', 30))  # default 30 seconds
+REDIS_WORKER_ID_PREFIX = env('REDIS_WORKER_ID_PREFIX', f'{REDIS_KEY_PREFIX}:{version}:work-ids:')
+REDIS_WORKER_REGISTER_EXPIRE = int(env('REDIS_WORKER_REGISTER_TIMEOUT', 120))  # default 2 minute
+if REDIS_WORKER_REGISTER_EXPIRE < REDIS_WORK_QUEUE_BLOCK_TIMEOUT:
+    raise ValueError('REDIS_WORKER_REGISTER_EXPIRE must be bigger than REDIS_WORK_QUEUE_BLOCK_TIMEOUT')
+
 # default 15 seconds
 # additional 5 seconds for communication between judge server and judge worker
 REDIS_SOCKET_TIMEOUT = int(env('REDIS_SOCKET_TIMEOUT', 60)) # default 1 minute

@@ -140,6 +140,7 @@ and then you can use the following command to test the api.
   ```
 
   # API
+  For batching, if you don't want to get timeout, please use the long-batch api (`/run/long-batch ` or `/judge/long-batch`) instead of the normal batch api (`/run/batch` or `/judge/batch`).
   ## POST /judge
   ### request (Submission)
   ```python
@@ -174,7 +175,26 @@ and then you can use the following command to test the api.
     reason: str
   ```
 
-## /judge/batch
+## judge batch
+```
+/judge/batch
+/judge/long-batch
+```
+### Request
+```python
+    sub_id: str | None = None
+    type: Literal['batch'] = 'batch'
+    # list of submissions
+    submissions: list[Submission]
+```
+
+  ### Response
+  ```python
+    sub_id: str
+    # list of submission results
+    results: list[SubmissionResult]
+  ```
+```
   ### Request
   ```python
       sub_id: str | None = None
@@ -225,7 +245,11 @@ and then you can use the following command to test the api.
     stderr: str
   ```
 
-## /run/batch
+## run batch
+```
+/run/long-batch
+/run/batch
+```
   ### Request
   ```python
       sub_id: str | None = None

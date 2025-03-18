@@ -96,11 +96,11 @@ async def _judge_batch_impl(redis_queue: RedisQueue, subs: list[Submission], lon
             name_results = await _pop_results(left_result_queue_names, left_time)
             if not name_results: # if no result, check if timeout
                 if start_working_time == 0:
-                    next_payload_json = await redis_queue.lrange(app_config.REDIS_WORK_QUEUE_NAME, 0, 0)
+                    next_payload_json = await redis_queue.peak(app_config.REDIS_WORK_QUEUE_NAME)
                     if not next_payload_json:
                         start_working_time = time()
                     else:
-                        next_payload = WorkPayload.model_validate_json(next_payload_json[0])
+                        next_payload = WorkPayload.model_validate_json(next_payload_json)
                         if next_payload.timestamp > min_timestamp:
                             logger.info('set start_working_time')
                             start_working_time = time()
@@ -108,6 +108,7 @@ async def _judge_batch_impl(redis_queue: RedisQueue, subs: list[Submission], lon
                     if time() - start_working_time > app_config.MAX_QUEUE_WAIT_TIME:
                         logger.warning(f'No result for {len(left_result_queue_names)} submissions. '
                                        f'Assuming all submissions are timed out.')
+                        logger.warning('This is mostly caused by redis (OOM or other issues). ')
                         break
             else:
                 start_working_time = 0

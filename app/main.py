@@ -95,3 +95,10 @@ async def judge_batch(batch_sub: BatchSubmission):
 @app.post('/judge/long-batch')
 async def judge_batch(batch_sub: BatchSubmission):
     return BatchJudgeResult.from_submission_result(await _judge_batch(redis_queue, batch_sub, long_batch=True))
+
+@app.get('/status')
+async def status():
+    return {
+        'queue': await redis_queue.llen(app_config.REDIS_WORK_QUEUE_NAME),
+        'num_workers': await redis_queue.count_keys(f'{app_config.REDIS_WORKER_ID_PREFIX}*')
+    }

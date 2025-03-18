@@ -23,6 +23,7 @@ class ResultReason(Enum):
     INTERNAL_ERROR = 'internal_error'
     WORKER_TIMEOUT = 'worker_timeout'
     QUEUE_TIMEOUT = 'queue_timeout'
+    invalid_input = 'invalid_input'
 
 
 class SubmissionResult(BaseModel):

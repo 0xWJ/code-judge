@@ -6,8 +6,11 @@ from pathlib import Path
 import json
 from dataclasses import asdict
 import traceback
+import uuid
+import json
 
 import psutil
+from pydantic import ValidationError
 
 from app.libs.executors.executor import ProcessExecuteResult
 from app.model import Submission, SubmissionResult, WorkPayload, ResultReason
@@ -92,6 +95,7 @@ def judge(sub: Submission):
 
 class Worker(Process):
     def _run_loop(self):
+        worker_id = str(uuid.uuid4())
         redis_queue = connect_queue(False)
         # warm up the connection
         for _ in range(10):
@@ -101,14 +105,60 @@ class Worker(Process):
                            f'This may cause issues with timeouts.'
                            f'Please make sure MAX_QUEUE_WORK_LIFE_TIME{app_config.MAX_QUEUE_WORK_LIFE_TIME} is large enough.')
         while True:
-            _, payload_json = redis_queue.block_pop(app_config.REDIS_WORK_QUEUE_NAME)
-            payload = WorkPayload.model_validate_json(payload_json)
-            result_queue_name = f'{app_config.REDIS_RESULT_PREFIX}{payload.work_id}'
-            if not payload.long_running and (lifetime := time() - payload.timestamp) >= app_config.MAX_QUEUE_WORK_LIFE_TIME:
-                logger.warning(f'Work {payload.work_id} lifetime ({lifetime:.2f}>{app_config.MAX_QUEUE_WORK_LIFE_TIME}) timed out. '
-                               f'Ignored. Concurrency is too hight?')
+            # register worker id
+            redis_queue.set(
+                f'{app_config.REDIS_WORKER_ID_PREFIX}{worker_id}',
+                1,
+                app_config.REDIS_WORKER_REGISTER_EXPIRE
+            )
+            work_item = redis_queue.block_pop(app_config.REDIS_WORK_QUEUE_NAME, app_config.REDIS_WORK_QUEUE_BLOCK_TIMEOUT)
+            if not work_item:
                 continue
-            result = judge(payload.submission)
+            _, payload_json = work_item
+
+            payload = None
+            result = None
+            result_queue_name = None
+            try:
+                payload = WorkPayload.model_validate_json(payload_json)
+                result_queue_name = f'{app_config.REDIS_RESULT_PREFIX}{payload.work_id}'
+                if not payload.long_running and (lifetime := time() - payload.timestamp) >= app_config.MAX_QUEUE_WORK_LIFE_TIME:
+                    logger.warning(f'Work {payload.work_id} lifetime ({lifetime:.2f}>{app_config.MAX_QUEUE_WORK_LIFE_TIME}) timed out. '
+                                f'Ignored. Concurrency is too hight?')
+                    continue
+                result = judge(payload.submission)
+            except ValidationError:
+                logger.exception(f'Failed to parse payload {payload_json}')
+                try:
+                    payload_dict = json.load(payload_json)
+                    work_id = payload_dict.get('work_id')
+                    sub_id = payload_dict.get('submission', {}).get('sub_id')
+                except Exception:
+                    work_id = None
+                    sub_id = None
+                if work_id and sub_id:
+                    result_queue_name = f'{app_config.REDIS_RESULT_PREFIX}{work_id}'
+                    result = SubmissionResult(
+                        sub_id=sub_id,
+                        success=False,
+                        cost=0,
+                        reason=ResultReason.invalid_input
+                    )
+                else:
+                    logger.error(f'Failed to parse payload {payload_json}')
+                    continue
+            except Exception:
+                logger.exception(f'Worker failed to process work item {payload_json}')
+                if payload is not None and result_queue_name is not None:
+                    result = SubmissionResult(
+                        sub_id=payload.submission.sub_id,
+                        success=False,
+                        cost=0,
+                        reason=ResultReason.INTERNAL_ERROR
+                    )
+                else:
+                    logger.error(f'Failed to process work item {payload_json}')
+                    continue
             redis_queue.push(result_queue_name, result.model_dump_json())
             redis_queue.expire(
                 result_queue_name,
