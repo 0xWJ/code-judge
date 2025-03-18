@@ -1,3 +1,9 @@
+# CAUTION
+This project will run arbitrary code. Please be careful when you use it.
+
+You should at least deploy it in an isolated environment (docker container for example), and should use in localhost or cluster, and never expose it to external network.
+
+
 # Pre-requisite
 
 ## Install docker
