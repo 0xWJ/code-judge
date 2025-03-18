@@ -102,7 +102,6 @@ async def _judge_batch_impl(redis_queue: RedisQueue, subs: list[Submission], lon
                     else:
                         next_payload = WorkPayload.model_validate_json(next_payload_json)
                         if next_payload.timestamp > max_timestamp:
-                            logger.info('set start_working_time')
                             start_working_time = time()
                 else:
                     if time() - start_working_time > app_config.MAX_QUEUE_WAIT_TIME:
