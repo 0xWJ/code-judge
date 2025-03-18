@@ -107,6 +107,7 @@ class RedisQueue:
         return None
 
     def block_pop(self, *queue_names, timeout=0) -> tuple[str, bytes] | None | Awaitable[tuple[str, bytes]] | Awaitable[None]:
+        assert queue_names and all(isinstance(q, str) for q in queue_names), "queue_names must be a non-empty list of strings"
         if self.is_async:
             return self._block_pop_async(*queue_names, timeout=timeout)
         else:
