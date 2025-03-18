@@ -36,7 +36,7 @@ async def judge(redis_queue: RedisQueue, submission: Submission):
         payload_json = payload.model_dump_json()
         await redis_queue.push(app_config.REDIS_WORK_QUEUE_NAME, payload_json)
         result_queue_name = f'{app_config.REDIS_RESULT_PREFIX}{payload.work_id}'
-        result_json = await redis_queue.block_pop(result_queue_name, app_config.MAX_QUEUE_WAIT_TIME)
+        result_json = await redis_queue.block_pop(result_queue_name, timeout=app_config.MAX_QUEUE_WAIT_TIME)
         await redis_queue.delete(result_queue_name)
         return _to_result(submission, start_time, result_json)
     except Exception:
