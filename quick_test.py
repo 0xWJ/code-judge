@@ -187,5 +187,5 @@ def test_all(type):
 
 
 if __name__ == '__main__':
-    test_all('judge')
     test_all('run')
+    test_all('judge')

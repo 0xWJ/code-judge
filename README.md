@@ -147,6 +147,7 @@ and then you can use the following command to test the api.
 
   # API
   For batching, if you don't want to get timeout, please use the long-batch api (`/run/long-batch ` or `/judge/long-batch`) instead of the normal batch api (`/run/batch` or `/judge/batch`).
+
   ## POST /judge
   ### request (Submission)
   ```python
@@ -169,6 +170,9 @@ and then you can use the following command to test the api.
     # whether the checking is successful
     # true if the output of the code is equal to the expected output
     success: bool
+    # whether the run is successful
+    # true if the code runs without any error and exits with 0
+    run_success: bool
     # the time cost of the code in seconds
     cost: float
     # the reason of failure
@@ -237,6 +241,9 @@ and then you can use the following command to test the api.
     sub_id: str
     # whether the run is successful
     success: bool
+    # whether the run is successful
+    # true if the code runs without any error and exits with 0
+    run_success: bool
     # the time cost of the code in seconds
     cost: float
     # the reason of failure
@@ -295,5 +302,23 @@ If you don't want to use them, you can also run workers/api in multiple machines
 2. To make your client more robust, you'd better:
   - check http status code. We are trying to always return 200, but it is not guaranteed.
   - check the `reason` field in the response. For example, `queue_timeout` means the workers are busy. You should reduce the concurrent requests.
-  - make sure you have set timeout for the request(i.e.`requests.post(..., timeout=...)`).
+  - make sure you have set timeout for the request(i.e.`requests.post(..., timeout=...)`). If you use long-batch api, the timeout should be long enough to wait for the workers to finish.
 3. You should check the log of the api and workers to see if there are any errors.
+
+# Run code in a container(sandbox)
+
+The default configuration is to run the code in the host, which is not safe. We make it default because you can use it everywhere (even when the host is a docker container.), and it is much faster than running in a container.
+
+If you want to run the code in a container, you can write a shell script to execute python/cpp code (by setting `PYTHON_EXECUTOR_PATH` `CPP_COMPILER_PATH`) in a new docker container. Take python as an example, you can write a shell script like this::
+
+```shell
+#!/bin/bash
+# run the code in a container
+# Remember to give the script execute permission
+# chmod +x python-docker.sh
+# $1: the code to run
+
+# the docker image name, you need to install popular python packages (like numpy)
+IMAGE_NAME=python:3.12
+docker run -i --rm -v /tmp:/tmp --entrypoint python3 ${IMAGE_NAME} $1
+```

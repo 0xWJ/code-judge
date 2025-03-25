@@ -1,18 +1,23 @@
 from contextlib import contextmanager
 import tempfile
 from typing import Any, Generator
-from app.libs.executors.executor import COMPILE_ERROR_EXIT_CODE, ProcessExecuteResult, ScriptExecutor, CompileError
+from app.libs.executors.executor import (
+    COMPILE_ERROR_EXIT_CODE, TIMEOUT_EXIT_CODE,
+    ProcessExecuteResult, ScriptExecutor, CompileError
+)
 
 
 RESOURCE_LIMIT_TEMPLATE = """
 #include <sys/resource.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <signal.h>
 
 static void handler(int sig) {{
     printf("Time limit exceeded\\n");
     kill(getpid(), SIGKILL);
+    exit({TIMEOUT_EXIT_CODE});
 }}
 
 class ResourceLimit {{
@@ -57,7 +62,8 @@ class CppExecutor(ScriptExecutor):
             with open(resource_limit_path, "w") as f:
                 f.write(RESOURCE_LIMIT_TEMPLATE.format(
                     timeout=self.timeout or 0,
-                    memory_limit=self.memory_limit or 0)
+                    memory_limit=self.memory_limit or 0,
+                    TIMEOUT_EXIT_CODE=TIMEOUT_EXIT_CODE)
                 )
             with open(source_path, "w") as f:
                 f.write('#include "resource_limit.h"\n')
