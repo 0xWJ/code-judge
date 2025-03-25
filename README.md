@@ -309,7 +309,7 @@ If you don't want to use them, you can also run workers/api in multiple machines
 
 The default configuration is to run the code in the host, which is not safe. We make it default because you can use it everywhere (even when the host is a docker container.), and it is much faster than running in a container.
 
-If you want to run the code in a container, you can write a shell script to execute python/cpp code (by setting `PYTHON_EXECUTOR_PATH` `CPP_COMPILER_PATH`) in a new docker container. Take python as an example, you can write a shell script like this::
+If you want to run the code in a container, you can write a shell script to execute python/cpp code (by setting `PYTHON_EXECUTOR_PATH`) in a new docker container. Take python as an example, you can write a shell script like this::
 
 ```shell
 #!/bin/bash
@@ -322,3 +322,5 @@ If you want to run the code in a container, you can write a shell script to exec
 IMAGE_NAME=python:3.12
 docker run -i --rm -v /tmp:/tmp --entrypoint python3 ${IMAGE_NAME} $1
 ```
+
+For cpp, currently we don't support running in a container, but it is straightforward to implement it. If you want this feature, please create an issue or PR.
