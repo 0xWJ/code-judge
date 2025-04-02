@@ -100,8 +100,9 @@ class RedisQueue:
                     break
             else:
                 effective_timeout = self.socket_timeout
-            result = await self.redis.blpop(queue_names, timeout=effective_timeout)
+
             effective_timeout = min(effective_timeout, self.socket_timeout - 2)  # 2 seconds for communication overhead
+            result = await self.redis.blpop(queue_names, timeout=effective_timeout)
             if result:
                 return result
         return None
