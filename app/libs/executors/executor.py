@@ -36,12 +36,11 @@ COMPILE_ERROR_EXIT_CODE = -102
 
 
 class ProcessExecutor:
-    def execute(self, config: dict[str, Any], stdin: str | None = None, timeout: float | None = None) -> ProcessExecuteResult:
+    def execute(self, command_args: list[str], stdin: str | None = None, timeout: float | None = None) -> ProcessExecuteResult:
         time_start = time.perf_counter()
         try:
-            args = config['args']
             std_input = stdin.encode() if stdin else None
-            result = subprocess.run(args, shell=False, check=False, capture_output=True, timeout=timeout, input=std_input)
+            result = subprocess.run(command_args, shell=False, check=False, capture_output=True, timeout=timeout, input=std_input)
             stdout = result.stdout.decode()
             stderr = result.stderr.decode()
             exit_code = result.returncode
@@ -73,4 +72,4 @@ class ScriptExecutor(ProcessExecutor):
 
     def execute_script(self, script: str, stdin: str | None = None, timeout: float | None = None) -> ProcessExecuteResult:
         with self.setup_command(script) as command:
-            return self.process_result(self.execute({'args': command}, stdin=stdin, timeout=timeout))
+            return self.process_result(self.execute(command, stdin=stdin, timeout=timeout))

@@ -49,13 +49,14 @@ def save_error_case(sub: Submission, result: ProcessExecuteResult | None = None,
 def executor_factory(type: str) -> ScriptExecutor:
     if type == 'python':
         return PythonExecutor(
-            python_path=app_config.PYTHON_EXECUTOR_PATH,
+            run_cl=app_config.PYTHON_EXECUTE_COMMAND,
             timeout=app_config.MAX_EXECUTION_TIME,
             memory_limit=app_config.MAX_MEMORY * 1024 * 1024,
         )
     elif type == 'cpp':
         return CppExecutor(
-            compiler_path=app_config.CPP_COMPILER_PATH,
+            compiler_cl=app_config.CPP_COMPILE_COMMAND,
+            run_cl=app_config.CPP_EXECUTE_COMMAND,
             timeout=app_config.MAX_EXECUTION_TIME,
             memory_limit=app_config.MAX_MEMORY * 1024 * 1024,
         )

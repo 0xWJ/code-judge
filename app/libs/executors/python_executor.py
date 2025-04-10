@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 import tempfile
 import io
+import shlex
 
 from .executor import ScriptExecutor, ProcessExecuteResult, TIMEOUT_EXIT_CODE
 
@@ -66,14 +67,14 @@ print(f"{DURATION_MARK}{{_exec_duration}}", flush=True)
 """.strip()
 
 class PythonExecutor(ScriptExecutor):
-    def __init__(self, python_path: str, timeout: int = None, memory_limit: int = None):
+    def __init__(self, run_cl: str, timeout: int = None, memory_limit: int = None):
         self.timeout = timeout
         self.memory_limit = (
-            memory_limit + 1024 * 1024 * 1024  # extra 1GB for python overhead
+            memory_limit + 128 * 1024 * 1024  # extra 128MB for python overhead
             if memory_limit
             else None
         )
-        self.python_path = python_path
+        self.run_pl = run_cl
 
     @contextmanager
     def setup_command(self, script: str):
@@ -84,7 +85,7 @@ class PythonExecutor(ScriptExecutor):
             f.write("\n")
             f.write(POST_TEMPLATE)
             f.flush()
-            yield [self.python_path, f.name]
+            yield shlex.split(self.run_pl.format(source=shlex.quote(f.name)))
 
     def process_result(self, result):
         if SCRIPT_ENDING_MARK in result.stdout:

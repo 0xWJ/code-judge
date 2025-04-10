@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 import tempfile
+import shlex
 from typing import Any, Generator
 from app.libs.executors.executor import (
     COMPILE_ERROR_EXIT_CODE, TIMEOUT_EXIT_CODE,
@@ -48,8 +49,9 @@ ResourceLimit resource_limit = ResourceLimit({timeout}, {memory_limit});
 
 
 class CppExecutor(ScriptExecutor):
-    def __init__(self, compiler_path: str, timeout: int = None, memory_limit: int = None):
-        self.compiler_path = compiler_path
+    def __init__(self, compiler_cl: str, run_cl:str, timeout: int = None, memory_limit: int = None):
+        self.compiler_cl = compiler_cl
+        self.run_cl = run_cl
         self.timeout = timeout
         self.memory_limit = memory_limit
 
@@ -69,12 +71,16 @@ class CppExecutor(ScriptExecutor):
                 f.write('#include "resource_limit.h"\n')
                 f.write(script)
             result = self.execute(
-                {'args': [self.compiler_path,  "-O2", source_path,  "-o", exec_path]},
+                shlex.split(
+                    self.compiler_cl.format(
+                        source=shlex.quote(source_path),
+                        exe=shlex.quote(exec_path))
+                ),
                 timeout=self.timeout or None
             )
             if not result.success:
                 raise CompileError(result.stderr)
-            yield [exec_path]
+            yield shlex.split(self.run_cl.format(exe=shlex.quote(exec_path)))
 
     def execute_script(self, script, stdin=None, timeout=None):
         try:
