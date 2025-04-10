@@ -311,7 +311,9 @@ The default configuration is to run the code in the host, which is not safe. We 
 
 If you want to run the code in a container, you can write a shell script to execute python/cpp code (by setting `PYTHON_EXECUTE_COMMAND`, `CPP_COMPILE_COMMAND` and `CPP_EXECUTE_COMMAND`) in a new docker container.
 
-Note: the worker manager (run_workers.py) should run as root user unless you use rootless docker/podman.
+Note:
+1. the worker manager (run_workers.py) should run as root user unless you use rootless docker/podman.
+2. It will be much slower than running in the host, because it needs to create a new container for each request. You may want to consider `crun` to make it faster.
 
 
 ## Python
