@@ -74,7 +74,7 @@ class PythonExecutor(ScriptExecutor):
             if memory_limit
             else None
         )
-        self.run_pl = run_cl
+        self.run_cl = run_cl
 
     @contextmanager
     def setup_command(self, script: str):
@@ -85,7 +85,7 @@ class PythonExecutor(ScriptExecutor):
             f.write("\n")
             f.write(POST_TEMPLATE)
             f.flush()
-            yield shlex.split(self.run_pl.format(source=shlex.quote(f.name)))
+            yield shlex.split(self.run_cl.format(source=shlex.quote(f.name)))
 
     def process_result(self, result):
         if SCRIPT_ENDING_MARK in result.stdout:
