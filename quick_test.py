@@ -174,6 +174,42 @@ def test_batch_timeout(type):
     assert results[5]['success']
     assert results[5]['run_success']
 
+
+def test_multi_process(type):
+    url = f'http://localhost:8000/{type}'
+    code = """
+from time import sleep
+import os
+from multiprocessing import Process
+
+
+def worker():
+    print('Worker process started')
+    sleep(100)
+    print('Worker process finished')
+
+
+print('PP: Starting worker process')
+# Start a worker process
+p = Process(target=worker)
+p.start()
+print('worker:', os.getpid())
+sleep(1)
+print('PP: Worker process Finished, but leaving its child process running')
+"""
+    data = {
+        "type": "python",
+        "solution": code,
+        "input": "",
+        "expected_output": "a"
+    }
+    response = requests.post(url, json=data)
+    print(response.json())
+    assert response.status_code == 200
+    assert not response.json()['success']
+    assert not response.json()['run_success']
+
+
 def test_all(type):
     start = time()
     test_batch_timeout(type)
@@ -184,6 +220,7 @@ def test_all(type):
     test_python(type)
     test_batch(type)
     test_python_timeout(type)
+    test_multi_process(type)
 
 
 if __name__ == '__main__':

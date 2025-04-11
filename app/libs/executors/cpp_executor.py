@@ -17,7 +17,7 @@ RESOURCE_LIMIT_TEMPLATE = """
 
 static void handler(int sig) {{
     printf("Time limit exceeded\\n");
-    kill(getpid(), SIGKILL);
+    killpg(0, SIGKILL);
     exit({TIMEOUT_EXIT_CODE});
 }}
 

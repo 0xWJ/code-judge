@@ -20,6 +20,8 @@ from app.libs.executors.executor import TIMEOUT_EXIT_CODE
 import app.config as app_config
 from app.work_queue import connect_queue
 
+from app.libs.utils import nothrow_killpg
+
 
 logger = logging.getLogger(__name__)
 
@@ -233,7 +235,14 @@ class WorkerManager:
                         if subp.is_running() and time() - subp.create_time() > app_config.MAX_QUEUE_WAIT_TIME:
                             is_hanged = 1
                             logger.info(f'Worker {subp.pid} is running for {time() - subp.create_time()} seconds. Terminating...')
-                            subp.kill()
+                            nothrow_killpg(pid=subp.pid)
+                        try:
+                            # it should have been terminated by now
+                            # let's wait to avoid zombie process
+                            subp.wait(timeout=0.1)
+                        except Exception:
+                            # will try in the next loop
+                            pass
                     busy_workers += is_busy
                     hanged_workers += is_hanged
                 except Exception:

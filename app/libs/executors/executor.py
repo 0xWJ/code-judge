@@ -4,15 +4,12 @@ import time
 from contextlib import contextmanager
 from typing import Any, Generator, Protocol
 
+from ..utils import nothrow_killpg
+
 
 class ExecuteResult(Protocol):
     success: bool
     cost: float # in seconds
-
-
-class Executor:
-    def execute(self, config: dict[str, Any], stdin: str | None = None, timeout: float | None = None) -> ExecuteResult:
-        ...
 
 
 @dataclass
@@ -31,6 +28,47 @@ class CompileError(Exception):
     pass
 
 
+def _run_as_pg(args: list[str],
+        input=None, capture_output=False, timeout=None, check=False, **kwargs):
+    # copied from subprocess.run
+    # For most cases, this is enough to make sure all subprocesses are
+    # killed when the parent process is killed.
+    # But if the subprocess creates a child process with new session,
+    # this will not work.
+    from subprocess import Popen, PIPE, TimeoutExpired, CalledProcessError, CompletedProcess
+
+    kwargs['start_new_session'] = True
+    if input is not None:
+        if kwargs.get('stdin') is not None:
+            raise ValueError('stdin and input arguments may not both be used.')
+        kwargs['stdin'] = PIPE
+
+    if capture_output:
+        if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+            raise ValueError('stdout and stderr arguments may not be used '
+                             'with capture_output.')
+        kwargs['stdout'] = PIPE
+        kwargs['stderr'] = PIPE
+
+    with Popen(args, **kwargs) as process:
+        try:
+            stdout, stderr = process.communicate(input, timeout=timeout)
+        except TimeoutExpired as exc:
+            # as we set start_new_session=True, pid is the process group id
+            nothrow_killpg(pgid=process.pid)
+            process.wait()
+            raise
+        except:  # Including KeyboardInterrupt, communicate handled that.
+            nothrow_killpg(pgid=process.pid)
+            # We don't call process.wait() as .__exit__ does that for us.
+            raise
+        retcode = process.poll()
+        if check and retcode:
+            raise CalledProcessError(retcode, process.args,
+                                     output=stdout, stderr=stderr)
+    return CompletedProcess(process.args, retcode, stdout, stderr)
+
+
 TIMEOUT_EXIT_CODE = -101
 COMPILE_ERROR_EXIT_CODE = -102
 
@@ -40,7 +78,7 @@ class ProcessExecutor:
         time_start = time.perf_counter()
         try:
             std_input = stdin.encode() if stdin else None
-            result = subprocess.run(command_args, shell=False, check=False, capture_output=True, timeout=timeout, input=std_input)
+            result = _run_as_pg(command_args, shell=False, check=False, capture_output=True, timeout=timeout, input=std_input)
             stdout = result.stdout.decode()
             stderr = result.stderr.decode()
             exit_code = result.returncode
