@@ -28,6 +28,10 @@ PYTHON_EXECUTE_COMMAND = env('PYTHON_EXECUTE_COMMAND', f'{PYTHON_EXECUTOR_PATH} 
 CPP_COMPILE_COMMAND = env('CPP_COMPILE_COMMAND', f'{CPP_COMPILER_PATH} -O2 -o {{exe}} {{source}}')
 CPP_EXECUTE_COMMAND = env('CPP_EXECUTE_COMMAND', '{exe}')
 
+PYTHON_EXECUTE_COMMAND='podman run -i --rm -v /tmp:/tmp --entrypoint python3 docker.io/library/python:3.12 {source}'
+CPP_COMPILE_COMMAND='podman run -i --rm -v /tmp:/tmp --entrypoint g++ docker.io/library/python:3.12 -O2 -o {exe} {source}'
+CPP_EXECUTE_COMMAND='podman run -i --rm -v /tmp:/tmp --entrypoint {exe} docker.io/library/python:3.12'
+
 # TODO: support fakeredis for testing.
 REDIS_URI = env('REDIS_URI', '')
 if not REDIS_URI:

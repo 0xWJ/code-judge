@@ -62,6 +62,8 @@ def _run_as_pg(args: list[str],
             nothrow_killpg(pgid=process.pid)
             # We don't call process.wait() as .__exit__ does that for us.
             raise
+        # in case some orphaned child process is still running
+        nothrow_killpg(pgid=process.pid)
         retcode = process.poll()
         if check and retcode:
             raise CalledProcessError(retcode, process.args,

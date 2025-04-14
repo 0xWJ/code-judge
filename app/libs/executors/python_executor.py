@@ -28,8 +28,15 @@ def _exec_set_alarm_timeout(timeout):
 # checking time limit exceed
 def _exec_time_exceeded(*_):
     print('Suicide from timeout.', flush=True)
-    os.killpg(os.getpgid(os.getpid()), signal.SIGKILL)  # sometime this can still fail
-    exit({TIMEOUT_EXIT_CODE})  # may not run here.
+    try:
+        os.killpg(0, signal.SIGKILL)  # sometime this can still fail
+    except Exception:
+        pass
+    try:
+        os.kill(0, signal.SIGKILL)  # sometime this can still fail
+    except Exception:
+        pass
+    os._exit({TIMEOUT_EXIT_CODE})  # may not run here.
 
 
 def _exec_set_max_runtime(seconds):
