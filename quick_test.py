@@ -1,5 +1,6 @@
 import requests
 from time import time
+from pathlib import Path
 
 
 def test_cpp(type):
@@ -29,6 +30,20 @@ int main(){printf("a");return 0;}
     print(response.json())
     assert response.status_code == 200
     assert response.json()['run_success']
+    assert not response.json()['success']
+
+    # compile error
+    data = {
+        "type": "cpp",
+        "solution": """#include <cstdio>
+int main(){printf("a")xx;return 0;}
+""",
+        "expected_output": "b"
+    }
+    response = requests.post(url, json=data)
+    print(response.json())
+    assert response.status_code == 200
+    assert not response.json()['run_success']
     assert not response.json()['success']
 
 
@@ -210,6 +225,48 @@ print('PP: Worker process Finished, but leaving its child process running')
     assert not response.json()['run_success']
 
 
+def test_io_valid(type):
+    url = f'http://localhost:8000/{type}'
+    code = """
+with open('test.txt', 'w') as f:
+    f.write('Hello, world!')
+"""
+    data = {
+        "type": "python",
+        "solution": code,
+        "input": "",
+        "expected_output": ""
+    }
+    response = requests.post(url, json=data)
+    print(response.json())
+    assert response.status_code == 200
+    assert response.json()['success']
+    assert response.json()['run_success']
+
+
+def test_io_invalid(type):
+    test_file = Path('/tmp/test.txt')
+    test_file.unlink(missing_ok=True)
+    url = f'http://localhost:8000/{type}'
+    code = """
+import pathlib
+print(pathlib.Path('.').resolve())
+with open('../test.txt', 'w') as f:
+    f.write('Hello, world!')
+"""
+    data = {
+        "type": "python",
+        "solution": code,
+        "input": "",
+        "expected_output": ""
+    }
+    response = requests.post(url, json=data)
+    print(response.json())
+    assert response.status_code == 200
+
+    print(f'Jailbreak Status: {Path('/tmp/test.txt').exists()}')
+
+
 def test_all(type):
     start = time()
     test_batch_timeout(type)
@@ -221,6 +278,8 @@ def test_all(type):
     test_batch(type)
     test_python_timeout(type)
     test_multi_process(type)
+    test_io_valid(type)
+    test_io_invalid(type)
 
 
 if __name__ == '__main__':

@@ -1,5 +1,6 @@
 import subprocess
 from dataclasses import dataclass, field
+import tempfile
 import time
 from contextlib import contextmanager
 from typing import Any, Generator, Protocol
@@ -76,11 +77,11 @@ COMPILE_ERROR_EXIT_CODE = -102
 
 
 class ProcessExecutor:
-    def execute(self, command_args: list[str], stdin: str | None = None, timeout: float | None = None) -> ProcessExecuteResult:
+    def execute(self, command_args: list[str], cwd=None, stdin: str | None = None, timeout: float | None = None) -> ProcessExecuteResult:
         time_start = time.perf_counter()
         try:
             std_input = stdin.encode() if stdin else None
-            result = _run_as_pg(command_args, shell=False, check=False, capture_output=True, timeout=timeout, input=std_input)
+            result = _run_as_pg(command_args, cwd=cwd, shell=False, check=False, capture_output=True, timeout=timeout, input=std_input)
             stdout = result.stdout.decode()
             stderr = result.stderr.decode()
             exit_code = result.returncode
@@ -101,7 +102,7 @@ class ProcessExecutor:
 
 class ScriptExecutor(ProcessExecutor):
     @contextmanager
-    def setup_command(self, script: str) -> Generator[list[str], Any, None]:
+    def setup_command(self, tmp_path: str, script: str) -> Generator[list[str], ProcessExecuteResult, None]:
         """
         Prepare the command to execute the script
         """
@@ -111,5 +112,14 @@ class ScriptExecutor(ProcessExecutor):
         return result
 
     def execute_script(self, script: str, stdin: str | None = None, timeout: float | None = None) -> ProcessExecuteResult:
-        with self.setup_command(script) as command:
-            return self.process_result(self.execute(command, stdin=stdin, timeout=timeout))
+        with tempfile.TemporaryDirectory() as tmp_path:
+            gen_command = self.setup_command(tmp_path, script)
+            command = next(gen_command)
+            while True:
+                try:
+                    result = self.execute(command, cwd=tmp_path, stdin=stdin, timeout=timeout)
+                    command = gen_command.send(result)
+                except StopIteration:
+                    break
+            # return the last result
+            return self.process_result(result)

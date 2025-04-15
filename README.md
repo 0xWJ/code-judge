@@ -305,18 +305,19 @@ If you don't want to use them, you can also run workers/api in multiple machines
   - make sure you have set timeout for the request(i.e.`requests.post(..., timeout=...)`). If you use long-batch api, the timeout should be long enough to wait for the workers to finish.
 3. You should check the log of the api and workers to see if there are any errors.
 
-# Run code in a container(sandbox)
+# Run code in a sandbox
 
-The default configuration is to run the code in the host, which is not safe. We make it default because you can use it everywhere (even when the host is a docker container.), and it is much faster than running in a container.
+The default configuration is to run the code in the host, which is not safe. We make it default because you can use it everywhere (even when the host is a docker container.), and it is much faster than running in a sandbox.
 
-If you want to run the code in a container, you can write a shell script to execute python/cpp code (by setting `PYTHON_EXECUTE_COMMAND`, `CPP_COMPILE_COMMAND` and `CPP_EXECUTE_COMMAND`) in a new docker container.
+If you want to run the code in a sandbox, you can customize `PYTHON_EXECUTE_COMMAND`, `CPP_COMPILE_COMMAND` and `CPP_EXECUTE_COMMAND` environment variables to run the code in a sandbox. Here are some popular sandboxes you can use.
 
+## Docker/Podman
 Note:
-1. the worker manager (run_workers.py) should run as root user unless you use rootless docker/podman.
-2. It will be much slower than running in the host, because it needs to create a new container for each request. You may want to consider `crun` to make it faster.
+  1. the worker manager (run_workers.py) should run as root user unless you use rootless docker/podman.
+  2. It will be much slower than running in the host, because it needs to create a new container for each request. You may want to consider `crun` to make it faster.
 
 
-## Python
+### Python
 
 Assume you have a docker image with python and popular packages installed, and the image name is `python:code-judge`.
 
@@ -326,7 +327,7 @@ PYTHON_EXECUTE_COMMAND='docker run -i --rm -v /tmp:/tmp --entrypoint python3 pyt
 ```
 to run the python code in a container.
 
-## C++
+### C/C++
 
 Assume you have a docker image with cpp and popular c++ libraries installed, and the image name is `cpp:code-judge`.
 
@@ -340,3 +341,24 @@ CPP_EXECUTE_COMMAND='docker run -i --rm -v /tmp:/tmp --entrypoint {exe} cpp:code
 ```
 to compile and run the cpp code in a container.
 
+## Firejail
+You can also use firejail to run the code in a sandbox. You need to install firejail first.
+```bash
+sudo apt-get install firejail
+```
+And then you can set
+```bash
+PYTHON_EXECUTE_COMMAND='firejail --read-only=/ --net=none --whitelist={workdir} --quiet -- python3 {{source}}'
+
+CPP_COMPILE_COMMAND='firejail --read-only=/ --net=none --whitelist={workdir} --quiet -- g++ -O2 -o {exe} {source}'
+
+CPP_EXECUTE_COMMAND='firejail --read-only=/ --net=none --whitelist={workdir} --quiet -- {exe}'
+```
+Which means:
+- `--read-only=/` means the container can only read the root filesystem.
+- `--net=none` means the container has no network access.
+- `--whitelist={workdir}` means the container can read and write the workdir.
+- `--quiet` means the container will not print any output.
+- `--` means the following command will be executed in the container.
+
+You can customize the command to your needs.

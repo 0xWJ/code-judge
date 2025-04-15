@@ -56,36 +56,31 @@ class CppExecutor(ScriptExecutor):
         self.timeout = timeout
         self.memory_limit = memory_limit
 
-    @contextmanager
-    def setup_command(self, script: str) -> Generator[list[str], Any, None]:
-        with tempfile.TemporaryDirectory() as tmp_path:
-            source_path = f"{tmp_path}/source.cpp"
-            resource_limit_path = f"{tmp_path}/resource_limit.h"
-            exec_path = f"{tmp_path}/run"
-            with open(resource_limit_path, "w") as f:
-                f.write(RESOURCE_LIMIT_TEMPLATE.format(
-                    timeout=self.timeout or 0,
-                    memory_limit=self.memory_limit or 0,
-                    TIMEOUT_EXIT_CODE=TIMEOUT_EXIT_CODE)
-                )
-            with open(source_path, "w") as f:
-                f.write('#include "resource_limit.h"\n')
-                f.write(script)
-            result = self.execute(
-                shlex.split(
-                    self.compiler_cl.format(
-                        source=shlex.quote(source_path),
-                        exe=shlex.quote(exec_path),
-                        workdir=shlex.quote(str(tmp_path))
-                )),
-                timeout=self.timeout or None
+    def setup_command(self, tmp_path: str, script: str) -> Generator[list[str], ProcessExecuteResult, None]:
+        source_path = f"{tmp_path}/source.cpp"
+        resource_limit_path = f"{tmp_path}/resource_limit.h"
+        exec_path = f"{tmp_path}/run"
+        with open(resource_limit_path, "w") as f:
+            f.write(RESOURCE_LIMIT_TEMPLATE.format(
+                timeout=self.timeout or 0,
+                memory_limit=self.memory_limit or 0,
+                TIMEOUT_EXIT_CODE=TIMEOUT_EXIT_CODE)
             )
-            if not result.success:
-                raise CompileError(result.stderr)
-            yield shlex.split(self.run_cl.format(
-                exe=shlex.quote(exec_path),
-                workdir=shlex.quote(str(tmp_path))
+        with open(source_path, "w") as f:
+            f.write('#include "resource_limit.h"\n')
+            f.write(script)
+        result = yield shlex.split(
+                self.compiler_cl.format(
+                    source=shlex.quote(source_path),
+                    exe=shlex.quote(exec_path),
+                    workdir=shlex.quote(str(tmp_path))
             ))
+        if not result.success:
+            raise CompileError(result.stderr)
+        yield shlex.split(self.run_cl.format(
+            exe=shlex.quote(exec_path),
+            workdir=shlex.quote(str(tmp_path))
+        ))
 
     def execute_script(self, script, stdin=None, timeout=None):
         try:

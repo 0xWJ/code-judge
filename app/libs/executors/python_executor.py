@@ -83,21 +83,19 @@ class PythonExecutor(ScriptExecutor):
         )
         self.run_cl = run_cl
 
-    @contextmanager
-    def setup_command(self, script: str):
-        with tempfile.TemporaryDirectory() as tmp_path:
-            source_path = f"{tmp_path}/source.py"
-            with open(source_path, mode='w') as f:
-                f.write(PRE_TEMPLATE.format(timeout=self.timeout, memory_limit=self.memory_limit))
-                f.write("\n")
-                f.write(script)
-                f.write("\n")
-                f.write(POST_TEMPLATE)
-                f.flush()
-            yield shlex.split(self.run_cl.format(
-                source=shlex.quote(source_path),
-                workdir=shlex.quote(str(tmp_path))
-            ))
+    def setup_command(self, tmp_path: str, script: str):
+        source_path = f"{tmp_path}/source.py"
+        with open(source_path, mode='w') as f:
+            f.write(PRE_TEMPLATE.format(timeout=self.timeout, memory_limit=self.memory_limit))
+            f.write("\n")
+            f.write(script)
+            f.write("\n")
+            f.write(POST_TEMPLATE)
+            f.flush()
+        yield shlex.split(self.run_cl.format(
+            source=shlex.quote(source_path),
+            workdir=shlex.quote(str(tmp_path))
+        ))
 
     def process_result(self, result):
         if SCRIPT_ENDING_MARK in result.stdout:
