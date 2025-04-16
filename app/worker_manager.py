@@ -116,10 +116,10 @@ class Worker(Process):
                 1,
                 app_config.REDIS_WORKER_REGISTER_EXPIRE
             )
-            work_item = redis_queue.block_pop(app_config.REDIS_WORK_QUEUE_NAME, timeout=app_config.REDIS_WORK_QUEUE_BLOCK_TIMEOUT)
+            work_item = redis_queue.block_zpop(app_config.REDIS_WORK_QUEUE_NAME, timeout=app_config.REDIS_WORK_QUEUE_BLOCK_TIMEOUT)
             if not work_item:
                 continue
-            _, payload_json = work_item
+            _, payload_json, _ = work_item
 
             payload = None
             result = None

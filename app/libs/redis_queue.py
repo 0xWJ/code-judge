@@ -9,10 +9,9 @@ logger = logging.getLogger(__name__)
 
 
 class RedisQueue:
-    def __init__(self, redis_uri, queue_name, *, socket_timeout: int = None, is_async: bool = False):
+    def __init__(self, redis_uri, *, socket_timeout: int = None, is_async: bool = False):
         self.redis_uri = redis_uri
         self.is_async = is_async
-        self.queue_name = queue_name
         self.socket_timeout = socket_timeout
         if self.socket_timeout is not None and self.socket_timeout < 10:
             raise ValueError('socket_timeout must be at least 10 seconds')
@@ -114,6 +113,76 @@ class RedisQueue:
         else:
             return self._block_pop_sync(*queue_names, timeout=timeout)
 
+    def _zpeak_sync(self, queue_name):
+        result = self.redis.zrange(queue_name, 0, 0, withscores=True)
+        if result:
+            return result[0]
+        return None
+
+    async def _zpeak_async(self, queue_name):
+        result = await self.redis.zrange(queue_name, 0, 0, withscores=True)
+        if result:
+            return result[0]
+        return None
+
+    def zpeak(self, queue_name) -> tuple[bytes, float] | Awaitable[tuple[bytes, float]] | None | Awaitable[None]:
+        if self.is_async:
+            return self._zpeak_async(queue_name)
+        else:
+            return self._zpeak_sync(queue_name)
+
+    def zpush(self, queue_name, key_score_dict: dict[str, float]):
+        return self.redis.zadd(queue_name, key_score_dict)
+
+    def zpop(self, queue_name)-> tuple[bytes, float] | Awaitable[tuple[bytes, float]] | None | Awaitable[None]:
+        return self.redis.zpopmin(queue_name)
+
+    def zpop_multi(self, *queue_names):
+        if not queue_names:
+            return []
+        pp = self.redis.pipeline(transaction=False)
+        for queue_name in queue_names:
+            pp.zpopmin(queue_name)
+        return pp.execute()
+
+    def _block_zpop_sync(self, *queue_names, timeout=0) -> tuple[str, bytes, float] | None:
+        start = time()
+        while True:
+            if timeout > 0:
+                effective_timeout = timeout - int(time() - start)
+                if effective_timeout <= 0:
+                    break
+            else:
+                effective_timeout = self.socket_timeout
+            effective_timeout = min(effective_timeout, self.socket_timeout - 2)  # 2 seconds for communication overhead
+            result = self.redis.bzpopmin(queue_names, timeout=effective_timeout)
+            if result:
+                return result
+        return None
+
+    async def _block_zpop_async(self, *queue_names, timeout=0) -> tuple[str, bytes, float] | None:
+        start = time()
+        while True:
+            if timeout > 0:
+                effective_timeout = timeout - int(time() - start)
+                if effective_timeout <= 0:
+                    break
+            else:
+                effective_timeout = self.socket_timeout
+
+            effective_timeout = min(effective_timeout, self.socket_timeout - 2)  # 2 seconds for communication overhead
+            result = await self.redis.bzpopmin(queue_names, timeout=effective_timeout)
+            if result:
+                return result
+        return None
+
+    def block_zpop(self, *queue_names, timeout=0) -> tuple[str, bytes, float] | None | Awaitable[tuple[str, bytes, float]] | Awaitable[None]:
+        assert queue_names and all(isinstance(q, str) for q in queue_names), "queue_names must be a non-empty list of strings"
+        if self.is_async:
+            return self._block_zpop_async(*queue_names, timeout=timeout)
+        else:
+            return self._block_zpop_sync(*queue_names, timeout=timeout)
+
     def expire(self, key, timeout):
         return self.redis.expire(key, timeout)
 
@@ -136,6 +205,9 @@ class RedisQueue:
 
     def llen(self, queue_name):
         return self.redis.llen(queue_name)
+
+    def zlen(self, queue_name):
+        return self.redis.zcard(queue_name)
 
     async def count_keys(self, pattern):
         assert self.is_async, "count_keys is only available in async mode"
