@@ -309,7 +309,9 @@ If you don't want to use them, you can also run workers/api in multiple machines
 
 The default configuration is to run the code in the host, which is not safe. We make it default because you can use it everywhere (even when the host is a docker container.), and it is much faster than running in a sandbox.
 
-If you want to run the code in a sandbox, you can customize `PYTHON_EXECUTE_COMMAND`, `CPP_COMPILE_COMMAND` and `CPP_EXECUTE_COMMAND` environment variables to run the code in a sandbox. Here are some popular sandboxes you can use.
+If you want to run the code in a sandbox, you can customize `PYTHON_EXECUTE_COMMAND`, `CPP_COMPILE_COMMAND` and `CPP_EXECUTE_COMMAND` environment variables to run the code in a sandbox. Please note that all sandboxes can only run directly on host, and they are not supported in unprivileged docker container.
+
+Here are some popular sandboxes you can use.
 
 ## Docker/Podman
 Note:
@@ -359,6 +361,29 @@ Which means:
 - `--net=none` means the container has no network access.
 - `--whitelist={workdir}` means the container can read and write the workdir.
 - `--quiet` means the container will not print any output.
+- `--` means the following command will be executed in the container.
+
+You can customize the command to your needs.
+
+## Bubblewrap
+
+You can also use bubblewrap to run the code in a sandbox. You need to install bubblewrap first.
+```bash
+sudo apt-get install bubblewrap
+```
+And then you can set
+```bash
+PYTHON_EXECUTE_COMMAND='bwrap --ro-bind / / --unshare-all --dev-bind /dev /dev --proc /proc --die-with-parent --bind {workdir} {workdir} -- python3 {source}'
+CPP_COMPILE_COMMAND='bwrap --ro-bind / / --unshare-all --dev-bind /dev /dev --proc /proc --die-with-parent --bind {workdir} {workdir} -- g++ -O2 -o {exe} {source}'
+CPP_EXECUTE_COMMAND='bwrap --ro-bind / / --unshare-all --dev-bind /dev /dev --proc /proc --die-with-parent --bind {workdir} {workdir} -- {exe}'
+```
+Where:
+- `--ro-bind / /` means the container can only read the root filesystem.
+- `--dev-bind /dev /dev` means the container can read and write the /dev filesystem.
+- `--proc /proc` means the container can read and write the /proc filesystem.
+- `--unshare-all` means the container will be unshared from the host.
+- `--die-with-parent` means the container will die when the parent process dies.
+- `--bind {workdir} {workdir}` means the container can read and write the workdir.
 - `--` means the following command will be executed in the container.
 
 You can customize the command to your needs.
