@@ -311,7 +311,7 @@ The default configuration is to run the code in the host, which is not safe. We 
 
 If you want to run the code in a sandbox, you can customize `PYTHON_EXECUTE_COMMAND`, `CPP_COMPILE_COMMAND` and `CPP_EXECUTE_COMMAND` environment variables to run the code in a sandbox. Please note that all sandboxes can only run directly on host, and they are not supported in unprivileged docker container.
 
-Here are some popular sandboxes you can use.
+Here are some popular sandboxes you can use. Docker/Podman is safest but slowest, and firejail/bubblewrap is fast but less safe. You can choose the one that fits your needs.
 
 ## Docker/Podman
 Note:
