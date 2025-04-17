@@ -61,7 +61,7 @@ def _judge_batch(url: str, submissions: list[Submission], timeout: int = 3600) -
 
     batch_submission = BatchSubmission(submissions=submissions, type='batch')
     response = requests.post(
-        f'{url}/judge/long-batch',
+        f'{url}/run/long-batch',
         json=asdict(batch_submission),
         timeout=timeout,
     )
