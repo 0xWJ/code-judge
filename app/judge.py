@@ -24,7 +24,7 @@ def _to_result(submission: Submission, start_time: float, result_json: tuple[str
         return SubmissionResult(sub_id=submission.sub_id, run_success=False, success=False, cost=time() - start_time, reason=ResultReason.QUEUE_TIMEOUT)
     else:
         result = SubmissionResult.model_validate_json(result_json[1])
-        if not result.success and result.cost >= app_config.MAX_EXECUTION_TIME:
+        if not result.run_success and result.cost >= app_config.MAX_EXECUTION_TIME:
             result.reason = ResultReason.WORKER_TIMEOUT
         return result
 
@@ -34,9 +34,9 @@ async def judge(redis_queue: RedisQueue, submission: Submission):
     try:
         payload = WorkPayload(submission=submission)
         payload_json = payload.model_dump_json()
-        await redis_queue.zpush(app_config.REDIS_WORK_QUEUE_NAME, {payload_json: time()})
+        await redis_queue.pqueue.push(app_config.REDIS_WORK_QUEUE_NAME, {payload_json: time()})
         result_queue_name = f'{app_config.REDIS_RESULT_PREFIX}{payload.work_id}'
-        result_json = await redis_queue.block_pop(result_queue_name, timeout=app_config.MAX_QUEUE_WAIT_TIME)
+        result_json = await redis_queue.queue.block_pop(result_queue_name, timeout=app_config.MAX_QUEUE_WAIT_TIME)
         await redis_queue.delete(result_queue_name)
         return _to_result(submission, start_time, result_json)
     except Exception:
@@ -57,15 +57,15 @@ async def _judge_batch_impl(redis_queue: RedisQueue, subs: list[Submission], lon
     async def _submit(payloads: list[WorkPayload]):
         # payload.work_id is different, so we can safely use dict
         payload_jsons = {payload.model_dump_json(): payload.timestamp for payload in payloads}
-        await redis_queue.zpush(app_config.REDIS_WORK_QUEUE_NAME, payload_jsons)
+        await redis_queue.pqueue.push(app_config.REDIS_WORK_QUEUE_NAME, payload_jsons)
 
     async def _sync_pop(queue_names: list[str]):
-        step_results = await redis_queue.pop_multi(*queue_names)
+        step_results = await redis_queue.queue.pop_multi(*queue_names)
         name_results = [(k, v) for k, v in zip(queue_names, step_results) if v is not None]
         return name_results
 
     async def _async_pop(queue_names: list[str], timeout: int):
-        name_result = await redis_queue.block_pop(*queue_names, timeout=timeout)
+        name_result = await redis_queue.queue.block_pop(*queue_names, timeout=timeout)
         if name_result is not None:
             return [(name_result[0].decode(), name_result[1])]
         return []
@@ -97,7 +97,7 @@ async def _judge_batch_impl(redis_queue: RedisQueue, subs: list[Submission], lon
             if not name_results: # if no result, check if timeout
                 if start_working_time == 0:
                     # the queue is ordered by timestamp
-                    next_payload_info = await redis_queue.zpeak(app_config.REDIS_WORK_QUEUE_NAME)
+                    next_payload_info = await redis_queue.pqueue.peak(app_config.REDIS_WORK_QUEUE_NAME)
                     if not next_payload_info:
                         start_working_time = time()
                     else:

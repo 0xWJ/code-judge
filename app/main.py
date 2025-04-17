@@ -99,6 +99,6 @@ async def judge_batch(batch_sub: BatchSubmission):
 @app.get('/status')
 async def status():
     return {
-        'queue': await redis_queue.zlen(app_config.REDIS_WORK_QUEUE_NAME),
+        'queue': await redis_queue.pqueue.len(app_config.REDIS_WORK_QUEUE_NAME),
         'num_workers': await redis_queue.count_keys(f'{app_config.REDIS_WORKER_ID_PREFIX}*')
     }
