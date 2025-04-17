@@ -339,8 +339,6 @@ Note:
   2. It will be much slower than running in the host, because it needs to create a new container for each request.
 
 
-### Python
-
 Assume you have a docker image with python and popular packages installed, and the image name is `python:code-judge`, and you have a docker image with cpp and popular c++ libraries installed, and the image name is `cpp:code-judge`.
 
 You can set
