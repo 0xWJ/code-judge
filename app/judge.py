@@ -73,7 +73,7 @@ async def _judge_batch_impl(redis_queue: RedisQueue, subs: list[Submission], lon
     async def _pop_results(queue_names: list[str], timeout: int):
         name_results = await _sync_pop(queue_names)
         if not name_results and timeout > 0:
-            name_results = await _async_pop(queue_names, min(timeout, app_config.MAX_QUEUE_WAIT_TIME))
+            name_results = await _async_pop(queue_names, min(timeout, app_config.MAX_PROCESS_TIME))
         return name_results
 
     async def _get_result(payloads: list[WorkPayload], max_chunk_wait_time):
@@ -108,10 +108,10 @@ async def _judge_batch_impl(redis_queue: RedisQueue, subs: list[Submission], lon
                             start_working_time = time()
                 else:
                     # if start_working_time is set, it means all work is done or in progress.
-                    # so we only wait for app_config.MAX_QUEUE_WAIT_TIME for them to finish.
+                    # so we only wait for app_config.MAX_PROCESS_TIME for them to finish.
                     # if it is still not finished, we assume some error happened.
                     # and we can break the loop.
-                    if time() - start_working_time > app_config.MAX_QUEUE_WAIT_TIME:
+                    if time() - start_working_time > app_config.MAX_PROCESS_TIME:
                         logger.warning(f'No result for {len(left_result_queue_names)} submissions. '
                                        f'Assuming all submissions are timed out.')
                         logger.warning('This is mostly caused by redis (OOM or other issues). ')

@@ -6,13 +6,26 @@ env = os.environ.get
 
 ERROR_CASE_SAVE_PATH = env('ERROR_CASE_SAVE_PATH', '')  # default empty, which means not save error case
 
-MAX_EXECUTION_TIME = int(env('MAX_EXECUTION_TIME', 10))  # default 10 seconds
 MAX_STDOUT_ERROR_LENGTH = int(env('MAX_STDOUT_ERROR_LENGTH', 1000))
-# default 15 seconds
-# additional 5 seconds for communication between judge server and judge worker
-MAX_QUEUE_WAIT_TIME = int(env('MAX_QUEUE_WAIT_TIME', MAX_EXECUTION_TIME + 5))
-LONG_BATCH_MAX_QUEUE_WAIT_TIME = int(env('LONG_BATCH_MAX_QUEUE_WAIT_TIME', 60*60))  # default 1 hour
+
+# timeline:
+# |-----------------MAX_QUEUE_WAIT_TIME--------------------------|
+# |----MAX_QUEUE_WORK_LIFE_TIME----|-----MAX_EXECUTION_TIME-------|
+
+MAX_EXECUTION_TIME = int(env('MAX_EXECUTION_TIME', 10))  # default 10 seconds
+# the max run time for a whole process
+# add 5 seconds for additional code execution time (process creation, etc.) and comunication time
+MAX_PROCESS_TIME = MAX_EXECUTION_TIME + 5
+# the work can only be in the queue for a limited time
+# after that, it will to be considered as queue timeout in non-long-batch mode
 MAX_QUEUE_WORK_LIFE_TIME = int(env('MAX_QUEUE_WORK_LIFE_TIME', 4))  # default 4s
+
+# max wait time after submission is sent to the queue
+MAX_QUEUE_WAIT_TIME = MAX_PROCESS_TIME + MAX_QUEUE_WORK_LIFE_TIME
+LONG_BATCH_MAX_QUEUE_WAIT_TIME = int(env('LONG_BATCH_MAX_QUEUE_WAIT_TIME', 60*60))  # default 1 hour
+if LONG_BATCH_MAX_QUEUE_WAIT_TIME < 60 * 60:
+    raise ValueError('LONG_BATCH_MAX_QUEUE_WAIT_TIME must be bigger than 1 hour')
+
 MAX_MEMORY = int(env('MAX_MEMORY', 256))  # default 256 MB
 MAX_WORKERS = int(env('MAX_WORKERS', os.cpu_count())) or os.cpu_count()  # default os.cpu_count()
 
@@ -41,8 +54,9 @@ REDIS_WORK_QUEUE_NAME = env('WORK_QUEUE_NAME', f'{REDIS_KEY_PREFIX}:{version}:wo
 REDIS_WORK_QUEUE_BLOCK_TIMEOUT = int(env('REDIS_WORK_QUEUE_BLOCK_TIMEOUT', 30))  # default 30 seconds
 REDIS_WORKER_ID_PREFIX = env('REDIS_WORKER_ID_PREFIX', f'{REDIS_KEY_PREFIX}:{version}:work-ids:')
 REDIS_WORKER_REGISTER_EXPIRE = int(env('REDIS_WORKER_REGISTER_TIMEOUT', 120))  # default 2 minute
-if REDIS_WORKER_REGISTER_EXPIRE < REDIS_WORK_QUEUE_BLOCK_TIMEOUT:
-    raise ValueError('REDIS_WORKER_REGISTER_EXPIRE must be bigger than REDIS_WORK_QUEUE_BLOCK_TIMEOUT')
+
+if REDIS_WORKER_REGISTER_EXPIRE < REDIS_WORK_QUEUE_BLOCK_TIMEOUT + MAX_PROCESS_TIME:
+    raise ValueError('REDIS_WORKER_REGISTER_EXPIRE must be bigger than REDIS_WORK_QUEUE_BLOCK_TIMEOUT + MAX_PROCESS_TIME')
 
 # default 15 seconds
 # additional 5 seconds for communication between judge server and judge worker
