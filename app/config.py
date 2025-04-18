@@ -9,7 +9,7 @@ ERROR_CASE_SAVE_PATH = env('ERROR_CASE_SAVE_PATH', '')  # default empty, which m
 MAX_STDOUT_ERROR_LENGTH = int(env('MAX_STDOUT_ERROR_LENGTH', 1000))
 
 # timeline:
-# |-----------------MAX_QUEUE_WAIT_TIME--------------------------|
+# |-----------------MAX_QUEUE_WAIT_TIME-------------------------------|
 # |----MAX_QUEUE_WORK_LIFE_TIME----|-----MAX_EXECUTION_TIME-------|
 
 MAX_EXECUTION_TIME = int(env('MAX_EXECUTION_TIME', 10))  # default 10 seconds
