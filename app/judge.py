@@ -114,7 +114,7 @@ async def _judge_batch_impl(redis_queue: RedisQueue, subs: list[Submission], lon
                     if time() - start_working_time > app_config.MAX_PROCESS_TIME:
                         logger.warning(f'No result for {len(left_result_queue_names)} submissions. '
                                        f'Assuming all submissions are timed out.')
-                        logger.warning('This is mostly caused by redis (OOM or other issues). ')
+                        logger.warning('This is mostly caused by redis OOM or workers killed or potential bug. ')
                         break
             else:
                 start_working_time = 0
