@@ -329,7 +329,7 @@ You can check the example client implementation in `judge_client.py`.
 
 The default configuration is to run the code in the host, which is not safe. We make it default because you can use it everywhere (even when the host is a docker container.), and it is much faster than running in a sandbox.
 
-If you want to run the code in a sandbox, you can customize `PYTHON_EXECUTE_COMMAND`, `CPP_COMPILE_COMMAND` and `CPP_EXECUTE_COMMAND` environment variables to run the code in a sandbox. Please note that all sandboxes can only run directly on host, and they are not supported in unprivileged docker container.
+If you want to run the code in a sandbox, you can customize `PYTHON_EXECUTE_COMMAND`, `CPP_COMPILE_COMMAND` and `CPP_EXECUTE_COMMAND` environment variables to run the code in a sandbox. Please note that almost all sandboxes can only run directly on host, and they are not supported in unprivileged docker container (except `Bubblewrap`, which can be used in some unprivileged environment).
 
 Here are some popular sandboxes you can use. Docker/Podman is safest but slowest, and firejail/bubblewrap is fast but less safe. You can choose the one that fits your needs.
 
@@ -358,7 +358,7 @@ sudo apt-get install firejail
 ```
 And then you can set
 ```bash
-PYTHON_EXECUTE_COMMAND='firejail --read-only=/ --net=none --whitelist={workdir} --quiet -- python3 {{source}}'
+PYTHON_EXECUTE_COMMAND='firejail --read-only=/ --net=none --whitelist={workdir} --quiet -- python3 {source}'
 
 CPP_COMPILE_COMMAND='firejail --read-only=/ --net=none --whitelist={workdir} --quiet -- g++ -O2 -o {exe} {source}'
 
@@ -381,14 +381,13 @@ sudo apt-get install bubblewrap
 ```
 And then you can set
 ```bash
-PYTHON_EXECUTE_COMMAND='bwrap --ro-bind / / --unshare-all --dev-bind /dev /dev --proc /proc --die-with-parent --bind {workdir} {workdir} -- python3 {source}'
-CPP_COMPILE_COMMAND='bwrap --ro-bind / / --unshare-all --dev-bind /dev /dev --proc /proc --die-with-parent --bind {workdir} {workdir} -- g++ -O2 -o {exe} {source}'
-CPP_EXECUTE_COMMAND='bwrap --ro-bind / / --unshare-all --dev-bind /dev /dev --proc /proc --die-with-parent --bind {workdir} {workdir} -- {exe}'
+PYTHON_EXECUTE_COMMAND='bwrap --ro-bind / / --unshare-all --dev-bind /dev /dev --die-with-parent --bind {workdir} {workdir} -- python3 {source}'
+CPP_COMPILE_COMMAND='bwrap --ro-bind / / --unshare-all --dev-bind /dev /dev --die-with-parent --bind {workdir} {workdir} -- g++ -O2 -o {exe} {source}'
+CPP_EXECUTE_COMMAND='bwrap --ro-bind / / --unshare-all --dev-bind /dev /dev --die-with-parent --bind {workdir} {workdir} -- {exe}'
 ```
 Where:
 - `--ro-bind / /` means the container can only read the root filesystem.
 - `--dev-bind /dev /dev` means the container can read and write the /dev filesystem.
-- `--proc /proc` means the container can read and write the /proc filesystem.
 - `--unshare-all` means the container will be unshared from the host.
 - `--die-with-parent` means the container will die when the parent process dies.
 - `--bind {workdir} {workdir}` means the container can read and write the workdir.
