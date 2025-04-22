@@ -101,7 +101,6 @@ class ProcessExecutor:
 
 
 class ScriptExecutor(ProcessExecutor):
-    @contextmanager
     def setup_command(self, tmp_path: str, script: str) -> Generator[list[str], ProcessExecuteResult, None]:
         """
         Prepare the command to execute the script

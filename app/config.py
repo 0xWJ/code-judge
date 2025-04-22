@@ -14,7 +14,7 @@ MAX_STDOUT_ERROR_LENGTH = int(env('MAX_STDOUT_ERROR_LENGTH', 1000))
 
 MAX_EXECUTION_TIME = int(env('MAX_EXECUTION_TIME', 10))  # default 10 seconds
 # the max run time for a whole process
-# add 5 seconds for additional code execution time (process creation, etc.) and comunication time
+# add 5 seconds for additional code execution time (process creation, etc.) and communication time
 MAX_PROCESS_TIME = MAX_EXECUTION_TIME + 5
 # the work can only be in the queue for a limited time
 # after that, it will to be considered as queue timeout in non-long-batch mode
