@@ -264,7 +264,7 @@ with open('../test.txt', 'w') as f:
     print(response.json())
     assert response.status_code == 200
 
-    print(f'Jailbreak Status: {Path('/tmp/test.txt').exists()}')
+    print(f"Jailbreak Status: {Path('/tmp/test.txt').exists()}")
 
 
 def test_all(type):

@@ -51,7 +51,7 @@ class RedisQueue:
         def _block_pop_sync(self, *queue_names, timeout=0) -> tuple[str, bytes] | None:
             start = time()
             while True:
-                effective_timeout = self.rq._get_propery_timeout(start, timeout)
+                effective_timeout = self.rq._get_proper_timeout(start, timeout)
                 if effective_timeout <= 0:
                     break
                 result = self.rq.redis.blpop(queue_names, timeout=effective_timeout)
@@ -62,7 +62,7 @@ class RedisQueue:
         async def _block_pop_async(self, *queue_names, timeout=0) -> tuple[str, bytes] | None:
             start = time()
             while True:
-                effective_timeout = self.rq._get_propery_timeout(start, timeout)
+                effective_timeout = self.rq._get_proper_timeout(start, timeout)
                 if effective_timeout <= 0:
                     break
                 result = await self.rq.redis.blpop(queue_names, timeout=effective_timeout)
@@ -121,7 +121,7 @@ class RedisQueue:
         def _block_pop_sync(self, *queue_names, timeout=0) -> tuple[str, bytes, float] | None:
             start = time()
             while True:
-                effective_timeout = self.rq._get_propery_timeout(start, timeout)
+                effective_timeout = self.rq._get_proper_timeout(start, timeout)
                 if effective_timeout <= 0:
                     break
                 result = self.rq.redis.bzpopmin(queue_names, timeout=effective_timeout)
@@ -132,7 +132,7 @@ class RedisQueue:
         async def _block_pop_async(self, *queue_names, timeout=0) -> tuple[str, bytes, float] | None:
             start = time()
             while True:
-                effective_timeout = self.rq._get_propery_timeout(start, timeout)
+                effective_timeout = self.rq._get_proper_timeout(start, timeout)
                 if effective_timeout <= 0:
                     break
                 result = await self.rq.redis.bzpopmin(queue_names, timeout=effective_timeout)
@@ -224,7 +224,7 @@ class RedisQueue:
         else:
             return self._time_sync()
 
-    def _get_propery_timeout(self, start, timeout):
+    def _get_proper_timeout(self, start, timeout):
         if timeout > 0:
             effective_timeout = timeout - int(time() - start)
         else:
