@@ -1,3 +1,9 @@
 redislite
 locust
 requests
+pytest
+pytest-asyncio
+tox
+tox-uv
+coverage
+pytest-cov

@@ -30,13 +30,15 @@ if app_config.RUN_WORKERS:
 @asynccontextmanager
 async def _set_access_log(_: fastapi.FastAPI):
     logger = logging.getLogger('uvicorn.access')
-    console_formatter = uvicorn.logging.AccessFormatter(
-        '%(levelprefix)s %(asctime)s - %(client_addr)s - "%(request_line)s" %(status_code)s',
-        datefmt="%Y-%m-%d %H:%M:%S",
-        use_colors=True,
-    )
-    old = logger.handlers[0].formatter
-    logger.handlers[0].setFormatter(console_formatter)
+    old_uvicorn_accesslog_formatter = None
+    if logger.handlers:
+        console_formatter = uvicorn.logging.AccessFormatter(
+            '%(levelprefix)s %(asctime)s - %(client_addr)s - "%(request_line)s" %(status_code)s',
+            datefmt="%Y-%m-%d %H:%M:%S",
+            use_colors=True,
+        )
+        old_uvicorn_accesslog_formatter = logger.handlers[0].formatter
+        logger.handlers[0].setFormatter(console_formatter)
 
     logger = logging.getLogger('app')
     logger.setLevel(logging.INFO)
@@ -56,7 +58,9 @@ async def _set_access_log(_: fastapi.FastAPI):
                        f'This may cause issues with timeouts.'
                        f'Please make sure MAX_QUEUE_WORK_LIFE_TIME{app_config.MAX_QUEUE_WORK_LIFE_TIME} is large enough.')
     yield
-    logger.handlers[0].setFormatter(old)
+
+    if old_uvicorn_accesslog_formatter:
+        logger.handlers[0].setFormatter(old_uvicorn_accesslog_formatter)
 
 
 app = fastapi.FastAPI(lifespan=_set_access_log)
