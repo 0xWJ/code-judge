@@ -1,3 +1,4 @@
+import signal
 import pytest
 import fakeredis
 import os
@@ -37,18 +38,30 @@ def test_client():
 
     sleep(1)  # wait for the server to start
 
-    workers = subprocess.Popen(
-        [sys.executable, 'run_workers.py'],
-        start_new_session=True,
-    )
+    def _start_workers():
+        os.setsid()  # new process group
+        # Start the workers
+        from app.worker_manager import WorkerManager
+
+        work_manager = WorkerManager()
+        work_manager.run()
+
+    workers = multiprocessing.Process(target=_start_workers)
+    workers.start()
     sleep(1)  # wait for the workers to start
 
     try:
         with TestClient(app) as client:
             yield client
     finally:
+        # TODO: dirty work
+        # we firstly send SIGTERM to the process group
+        # so coverage have a chance to finish
+        # but it is not really killing the process group
+        # so we need to kill the process group with SIGKILL
+        nothrow_killpg(pgid=workers.pid, sig=signal.SIGTERM)
+        workers.join(timeout=1)
         nothrow_killpg(pgid=workers.pid)
-        workers.wait()
 
         redis_process.kill()
         redis_process.join()
