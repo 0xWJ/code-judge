@@ -116,6 +116,8 @@ class ScriptExecutor(ProcessExecutor):
             command = next(gen_command)
             while True:
                 try:
+                    # add 1 second to timeout as the overhead of the pre/post processing
+                    timeout = timeout + 1 if timeout else None
                     result = self.execute(command, cwd=tmp_path, stdin=stdin, timeout=timeout)
                     command = gen_command.send(result)
                 except StopIteration:

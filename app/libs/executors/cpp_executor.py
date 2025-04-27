@@ -16,7 +16,8 @@ RESOURCE_LIMIT_TEMPLATE = """
 #include <signal.h>
 
 static void handler(int sig) {{
-    printf("Time limit exceeded\\n");
+    printf("Suicide from timeout.\\n");
+    fflush(stdout);
     killpg(0, SIGKILL);
     kill(0, SIGKILL);
     _exit({TIMEOUT_EXIT_CODE});
@@ -45,7 +46,7 @@ public:
     }}
 }};
 
-ResourceLimit resource_limit = ResourceLimit({timeout}, {memory_limit});
+ResourceLimit _exec_resource_limit = ResourceLimit({timeout}, {memory_limit});
 """.strip()
 
 

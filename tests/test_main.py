@@ -31,6 +31,26 @@ int main(){sleep(3);printf("a");return 0;}
 
 
 @pytest.mark.parametrize("type", ["judge", "run"])
+def test_cpp_timeout(test_client, type):
+    data = {
+        "type": "cpp",
+        "solution": """#include <cstdio>
+#include <unistd.h>
+int main(){sleep(10);printf("a");return 0;}
+""",
+        "expected_output": "a"
+    }
+    response = test_client.post(f'/{type}', json=data)
+    print(response.json())
+    assert response.status_code == 200
+    assert not response.json()['run_success']
+    assert not response.json()['success']
+    assert response.json()['reason'] == 'worker_timeout'
+    if type == 'run':
+        assert response.json()['stdout'].strip() == 'Suicide from timeout.'
+
+
+@pytest.mark.parametrize("type", ["judge", "run"])
 def test_cpp_fail(test_client, type):
     data = {
         "type": "cpp",
@@ -76,6 +96,24 @@ def test_python(test_client, type):
     assert response.status_code == 200
     assert response.json()['success']
     assert response.json()['run_success']
+
+
+@pytest.mark.parametrize("type", ["judge", "run"])
+def test_python_timeout(test_client, type):
+    data = {
+        "type": "python",
+        "solution": "from time import sleep\nsleep(10)",
+        "input": "a",
+        "expected_output": "a"
+    }
+    response = test_client.post(f'{type}', json=data)
+    print(response.json())
+    assert response.status_code == 200
+    assert not response.json()['success']
+    assert not response.json()['run_success']
+    assert response.json()['reason'] == 'worker_timeout'
+    if type == 'run':
+        assert response.json()['stdout'].strip() == 'Suicide from timeout.'
 
 
 @pytest.mark.parametrize("type", ["judge", "run"])

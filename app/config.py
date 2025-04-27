@@ -12,7 +12,7 @@ MAX_STDOUT_ERROR_LENGTH = int(env('MAX_STDOUT_ERROR_LENGTH', 1000))
 # |-----------------MAX_QUEUE_WAIT_TIME-------------------------------|
 # |----MAX_QUEUE_WORK_LIFE_TIME----|-----MAX_EXECUTION_TIME-------|
 
-MAX_EXECUTION_TIME = int(env('MAX_EXECUTION_TIME', 10))  # default 10 seconds
+MAX_EXECUTION_TIME = int(env('MAX_EXECUTION_TIME', 10))  # default 10 seconds (roughly)
 # the max run time for a whole process
 # add 5 seconds for additional code execution time (process creation, etc.) and communication time
 MAX_PROCESS_TIME = MAX_EXECUTION_TIME + 5
@@ -53,7 +53,8 @@ REDIS_WORK_QUEUE_NAME = env('WORK_QUEUE_NAME', f'{REDIS_KEY_PREFIX}:{version}:wo
 
 REDIS_WORK_QUEUE_BLOCK_TIMEOUT = int(env('REDIS_WORK_QUEUE_BLOCK_TIMEOUT', 30))  # default 30 seconds
 REDIS_WORKER_ID_PREFIX = env('REDIS_WORKER_ID_PREFIX', f'{REDIS_KEY_PREFIX}:{version}:work-ids:')
-REDIS_WORKER_REGISTER_EXPIRE = int(env('REDIS_WORKER_REGISTER_TIMEOUT', 120))  # default 2 minute
+# default 2 minute + REDIS_WORK_QUEUE_BLOCK_TIMEOUT + MAX_PROCESS_TIME
+REDIS_WORKER_REGISTER_EXPIRE = int(env('REDIS_WORKER_REGISTER_TIMEOUT', 120 + REDIS_WORK_QUEUE_BLOCK_TIMEOUT + MAX_PROCESS_TIME))
 
 if REDIS_WORKER_REGISTER_EXPIRE < REDIS_WORK_QUEUE_BLOCK_TIMEOUT + MAX_PROCESS_TIME:
     raise ValueError('REDIS_WORKER_REGISTER_EXPIRE must be bigger than REDIS_WORK_QUEUE_BLOCK_TIMEOUT + MAX_PROCESS_TIME')

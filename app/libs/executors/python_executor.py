@@ -27,6 +27,8 @@ def _exec_set_alarm_timeout(timeout):
 
 # checking time limit exceed
 def _exec_time_exceeded(*_):
+    import os
+    import signal
     print('Suicide from timeout.', flush=True)
     try:
         os.killpg(0, signal.SIGKILL)  # sometime this can still fail
@@ -62,14 +64,22 @@ if {{memory_limit}}:
 
 _exec_time_start = time.perf_counter()
 
+del signal
+del resource
+del os
+del time
+
 """.strip()
 
 POST_TEMPLATE = f"""
 
+import time
 _exec_time_end = time.perf_counter()
 _exec_duration = _exec_time_end - _exec_time_start
 print("{SCRIPT_ENDING_MARK}")
 print(f"{DURATION_MARK}{{_exec_duration}}", flush=True)
+
+del time
 
 """.strip()
 
