@@ -11,75 +11,67 @@ DURATION_MARK = "@@D"
 
 
 PRE_TEMPLATE = f"""
-import signal
-import resource
-import os
-import time
-
-# preventing multi-threading for numpy
-os.environ['OPENBLAS_NUM_THREADS'] = '1'
-
-
-def _exec_set_alarm_timeout(timeout):
-    signal.signal(signal.SIGALRM, _exec_time_exceeded)
-    signal.alarm(timeout)
-
-
-# checking time limit exceed
-def _exec_time_exceeded(*_):
-    import os
+def _exec_prepare():
     import signal
-    print('Suicide from timeout.', flush=True)
-    try:
-        os.killpg(0, signal.SIGKILL)  # sometime this can still fail
-    except Exception:
-        pass
-    try:
-        os.kill(0, signal.SIGKILL)  # sometime this can still fail
-    except Exception:
-        pass
-    os._exit({TIMEOUT_EXIT_CODE})  # may not run here.
+    import resource
+    import os
+    import time
 
+    # preventing multi-threading for numpy
+    os.environ['OPENBLAS_NUM_THREADS'] = '1'
 
-def _exec_set_max_runtime(seconds):
-    # setting up the resource limit
-    soft, hard = resource.getrlimit(resource.RLIMIT_CPU)
-    resource.setrlimit(resource.RLIMIT_CPU, (seconds, hard))
-    # Just use its default behavior to terminate the process.
-    # signal.signal(signal.SIGXCPU, _exec_time_exceeded)
+    def _exec_set_alarm_timeout(timeout):
+        signal.signal(signal.SIGALRM, _exec_time_exceeded)
+        signal.alarm(timeout)
 
+    # checking time limit exceed
+    def _exec_time_exceeded(*_):
+        print('Suicide from timeout.', flush=True)
+        try:
+            os.killpg(0, signal.SIGKILL)  # sometime this can still fail
+        except Exception:
+            pass
+        try:
+            os.kill(0, signal.SIGKILL)  # sometime this can still fail
+        except Exception:
+            pass
+        os._exit({TIMEOUT_EXIT_CODE})  # may not run here.
 
-def _exec_limit_memory(maxsize):
-    soft, hard = resource.getrlimit(resource.RLIMIT_AS)
-    resource.setrlimit(resource.RLIMIT_AS, (maxsize, hard))
+    def _exec_set_max_runtime(seconds):
+        # setting up the resource limit
+        soft, hard = resource.getrlimit(resource.RLIMIT_CPU)
+        resource.setrlimit(resource.RLIMIT_CPU, (seconds, hard))
+        # Just use its default behavior to terminate the process.
+        # signal.signal(signal.SIGXCPU, _exec_time_exceeded)
 
+    def _exec_limit_memory(maxsize):
+        soft, hard = resource.getrlimit(resource.RLIMIT_AS)
+        resource.setrlimit(resource.RLIMIT_AS, (maxsize, hard))
 
-resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-if {{timeout}}:
-    _exec_set_alarm_timeout({{timeout}})
-    _exec_set_max_runtime({{timeout}})
+    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+    if {{timeout}}:
+        _exec_set_alarm_timeout({{timeout}})
+        _exec_set_max_runtime({{timeout}})
 
-if {{memory_limit}}:
-    _exec_limit_memory({{memory_limit}})
+    if {{memory_limit}}:
+        _exec_limit_memory({{memory_limit}})
 
-_exec_time_start = time.perf_counter()
+    return time.perf_counter()
 
-del signal
-del resource
-del os
-del time
+_exec_time_start = _exec_prepare()
 
 """.strip()
 
 POST_TEMPLATE = f"""
 
-import time
-_exec_time_end = time.perf_counter()
-_exec_duration = _exec_time_end - _exec_time_start
-print("{SCRIPT_ENDING_MARK}")
-print(f"{DURATION_MARK}{{_exec_duration}}", flush=True)
+def _exec_end():
+    import time
+    _exec_time_end = time.perf_counter()
+    _exec_duration = _exec_time_end - _exec_time_start
+    print("{SCRIPT_ENDING_MARK}")
+    print(f"{DURATION_MARK}{{_exec_duration}}", flush=True)
 
-del time
+_exec_end()
 
 """.strip()
 
