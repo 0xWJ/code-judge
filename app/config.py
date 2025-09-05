@@ -26,7 +26,10 @@ LONG_BATCH_MAX_QUEUE_WAIT_TIME = int(env('LONG_BATCH_MAX_QUEUE_WAIT_TIME', 60*60
 if LONG_BATCH_MAX_QUEUE_WAIT_TIME < 60 * 60 + MAX_PROCESS_TIME:
     raise ValueError('LONG_BATCH_MAX_QUEUE_WAIT_TIME must be bigger than 1 hour plus MAX_PROCESS_TIME')
 
-MAX_MEMORY = int(env('MAX_MEMORY', 256))  # default 256 MB
+# default 256 MB
+# Please note 256MB is too small for some libraries like pytorch
+# For example, loading pytorch can take over 4GB memory
+MAX_MEMORY = int(env('MAX_MEMORY', 256))
 MAX_WORKERS = int(env('MAX_WORKERS', os.cpu_count())) or os.cpu_count()  # default os.cpu_count()
 
 RUN_WORKERS = int(env('RUN_WORKERS', 0))  # default 0, which means run workers in a separate process
