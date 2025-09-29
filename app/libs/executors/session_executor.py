@@ -7,7 +7,7 @@ import psutil
 
 import app.config as app_config
 from ..redis_queue import RedisQueue
-from .executor import ScriptExecutor
+from .python_executor import PythonExecutor
 from . import session_script
 
 
@@ -46,10 +46,38 @@ class SessionRunner:
 class JupyterSessionRunner(SessionRunner):
     start_script_template = """
 import time
+import os
 from jupyter_client import KernelManager
+
+os.chdir('/')  # change to a safe directory
 
 km = KernelManager()
 km.start_kernel()
+
+kc = km.client()
+kc.start_channels()
+
+# wait for the kernel to be ready
+def wait_for_kernel_ready(kc, timeout=10, poll_interval=0.5):
+    import time
+    t0 = time.time()
+    while time.time() - t0 < timeout:
+        try:
+            msg_id = kc.execute("1 + 1", silent=True, user_expressions={{}}, allow_stdin=False)
+            reply = kc.get_shell_msg(timeout=1)
+            content = reply['content']
+            if content['status'] == 'ok':
+                return True
+        except Exception as e:
+            continue
+        time.sleep(poll_interval)
+    raise TimeoutError
+
+try:
+    wait_for_kernel_ready(kc, {timeout})
+except TimeoutError:
+    km.shutdown_kernel()
+    raise
 
 connection_info = km.get_connection_info()
 print(connection_info, flush=True)
@@ -73,10 +101,12 @@ from jupyter_client import BlockingKernelClient
 def execute_code_in_existing_kernel(code):
     kc = BlockingKernelClient()
     kc.load_connection_info({connection_info})
-    kc.start_channels()
+
     if not kc.is_alive():
         print("Kernel is not alive", file=sys.stderr)
         exit(1)
+
+    kc.start_channels()
 
     try:
         msg_id = kc.execute(code)
@@ -101,33 +131,39 @@ def execute_code_in_existing_kernel(code):
                     print(msg['content']['traceback'], file=sys.stderr)
     finally:
         kc.stop_channels()
+if '{script}':
+    script = '{script}'
+else:
+    with open('{script_path}', 'r') as f:
+        script = f.read()
 
-with open('{script_path}', 'r') as f:
-    script = f.read()
-    execute_code_in_existing_kernel(script)
+execute_code_in_existing_kernel(script)
 """
 
-    def gen_start(self) -> str:
+    def gen_start(self, timeout) -> str:
         return self.start_script_template.format(
-            ready_mark=session_script.READY_MARK
+            ready_mark=session_script.READY_MARK,
+            timeout=timeout - 1  # leave 1 second for the overhead
         )
 
     def gen_run(self, session: SessionInfo, script_path: str, timeout: int) -> str:
         return self.run_script_template.format(
             connection_info=session['stdout'],
+            script='',
             script_path=script_path,
-            timeout=timeout
+            timeout=timeout - 1  # leave 1 second for the overhead
         )
 
     def gen_stop(self, session: SessionInfo, timeout: int) -> str:
         return self.run_script_template.format(
             connection_info=session['stdout'],
             script='exit(0)',
-            timeout=timeout
+            script_path='',
+            timeout=timeout - 1  # leave 1 second for the overhead
         )
 
 
-class SessionExecutor(ScriptExecutor):
+class SessionExecutor(PythonExecutor):
     def __init__(self, redis_queue: RedisQueue, session_initiator_cl: str, run_cl: str, session: str, timeout: int = None, memory_limit: int = None):
         self.redis = redis_queue
         self.session = session
@@ -137,12 +173,6 @@ class SessionExecutor(ScriptExecutor):
         self.session_id = session_parts.path
         self.session_action = session_parts.fragment
 
-        self.memory_limit = (
-            memory_limit + 128 * 1024 * 1024  # extra 128MB for python overhead
-            if memory_limit
-            else None
-        )
-        self.run_cl = run_cl
         self.start_session_cl = shlex.split(
             session_initiator_cl.format(
                 source=shlex.quote(session_script.__file__)
@@ -151,7 +181,7 @@ class SessionExecutor(ScriptExecutor):
         self.runners ={
             'jupyter': JupyterSessionRunner(),
         }
-        super().__init__(timeout)
+        super().__init__(run_cl, timeout, memory_limit)
 
     def setup_command(self, tmp_path: str, script: str):
         runner = self.runners.get(self.session_type)
@@ -164,7 +194,7 @@ class SessionExecutor(ScriptExecutor):
 
         if self.session_id == 'new':
             with open(source_path, mode='w') as f:
-                f.write(script if runner is None else runner.gen_start())
+                f.write(script if runner is None else runner.gen_start(timeout=self.timeout))
                 f.flush()
             yield self.start_session_cl + shlex.split(self.run_cl.format(
                 source=shlex.quote(source_path),
@@ -174,6 +204,7 @@ class SessionExecutor(ScriptExecutor):
             session_info_json = self.redis.dict.get(
                 app_config.REDIS_SESSION_MACHINE_SESSIONS_NAME, self.session_id
             )
+            print(session_info_json)
             if not session_info_json:
                 raise ValueError("Session not found")
 
@@ -185,22 +216,24 @@ class SessionExecutor(ScriptExecutor):
             session_process = psutil.Process(pid)  # check if the process is alive
             if not session_process.is_running() or session_process.create_time() != session_info['create_time']:
                 raise ValueError("Session process is not running")
-
+            print(session_process)
             if self.session_action == 'close':
                 script_to_run = runner.gen_stop(session_info, timeout=self.timeout) if runner else script
             else:
                 script_to_run = runner.gen_run(session_info, cell_source_path, timeout=self.timeout) if runner else script
+            yield from super().setup_command(tmp_path, script_to_run)
+            # print(script_to_run)
+            # with open(source_path, mode='w') as f:
+            #     f.write(script_to_run)
+            #     f.flush()
 
-            with open(source_path, mode='w') as f:
-                f.write(script_to_run)
-                f.flush()
-
-            yield shlex.split(self.run_cl.format(
-                source=shlex.quote(source_path),
-                workdir=shlex.quote(str(tmp_path))
-            ))
+            # yield shlex.split(self.run_cl.format(
+            #     source=shlex.quote(source_path),
+            #     workdir=shlex.quote(str(tmp_path))
+            # ))
 
     def process_result(self, result):
+        result = super().process_result(result)
         if self.session_id == 'new':
             if session_script.INFO_MARK in result.stdout:
                 result.stdout, meta_info = result.stdout.split(session_script.INFO_MARK, 2)
@@ -213,11 +246,11 @@ class SessionExecutor(ScriptExecutor):
                 self.redis.dict.set(
                     app_config.REDIS_SESSION_MACHINE_SESSIONS_NAME, session_id, json.dumps(session_info)
                 )
-                self.redis.dict.expire(
-                    app_config.REDIS_SESSION_MACHINE_SESSIONS_NAME,
-                    app_config.REDIS_SESSION_EXPIRE,
-                    session_id
-                )
+                # self.redis.dict.expire(
+                #     app_config.REDIS_SESSION_MACHINE_SESSIONS_NAME,
+                #     app_config.REDIS_SESSION_EXPIRE,
+                #     session_id
+                # )
 
                 result.session = session_id
                 if self.session_type:
@@ -252,4 +285,6 @@ class SessionExecutor(ScriptExecutor):
                     app_config.REDIS_SESSION_MACHINE_SESSIONS_NAME, self.session_id, json.dumps(session_info)
                 )
 
+        if self.session_id and result.session is None:
+            result.session = self.session_id
         return result

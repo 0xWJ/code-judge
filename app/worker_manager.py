@@ -106,7 +106,8 @@ def judge(redis_queue, sub: Submission):
         logger.exception(f'Worker failed to judge submission {sub.sub_id}')
         save_error_case(sub, None, e)
         sub_result = SubmissionResult(
-            sub_id=sub.sub_id, run_success=False, success=False, cost=0, reason=ResultReason.INTERNAL_ERROR
+            sub_id=sub.sub_id, run_success=False, success=False, cost=0, reason=ResultReason.INTERNAL_ERROR,
+            session=sub.session
         )
     return sub_result
 
@@ -304,6 +305,7 @@ class WorkerManager:
 
             if not session_process or not session_process.is_running() or session_process.create_time() != create_time:
                 # session process is already gone
+                logger.info(f'Session {session_id} process is gone. Cleaning up...')
                 self.redis_queue.dict.delete(
                     app_config.REDIS_SESSION_MACHINE_SESSIONS_NAME, session_id
                 )

@@ -3,6 +3,10 @@ import time
 import sys
 import selectors
 import psutil
+import os
+
+os.environ['PYTHONUNBUFFERED'] = '1'  # ensure python output is unbuffered
+os.environ['PYDEVD_DISABLE_FILE_VALIDATION'] = '1'  # for debugpy
 
 
 READY_MARK = '##SESSION-READY##'

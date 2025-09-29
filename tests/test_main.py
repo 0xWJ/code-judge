@@ -338,6 +338,8 @@ def test_session(test_client):
     assert response.status_code == 200
     session = resp['session']
     assert session.startswith('jupyter:')
+    # import time
+    # time.sleep(10)  # wait for the session to be ready
 
     code = """
 a = 100
@@ -370,9 +372,10 @@ print(a)
     assert response.json()['stdout'].strip() == '101'
 
     # close the session
-    response = test_client.post('/session', json={
-        'type': 'jupyter',
-        'session': session + '#close'
+    response = test_client.post('/run', json={
+        'type': 'python',
+        'session': session + '#close',
+        'solution': '',
     })
     print(response.json())
     assert response.status_code == 200

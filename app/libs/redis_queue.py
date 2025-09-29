@@ -170,9 +170,11 @@ class RedisQueue:
             self.rq = rq
 
         def set(self, dict_name, key, value):
+            print('set', dict_name, key, value)
             return self.rq.redis.hset(dict_name, key, value)
 
         def get(self, dict_name, key):
+            print('get', dict_name, key)
             return self.rq.redis.hget(dict_name, key)
 
         def get_all(self, dict_name):
@@ -182,6 +184,7 @@ class RedisQueue:
             return self.rq.redis.hkeys(dict_name)
 
         def delete(self, dict_name, *keys):
+            print('delete', dict_name, keys)
             return self.rq.redis.hdel(dict_name, *keys)
 
         def len(self, dict_name):
@@ -191,6 +194,7 @@ class RedisQueue:
             return self.rq.redis.hkeys(dict_name)
 
         def expire(self, dict_name, timeout, *keys):
+            print('expire', dict_name, timeout, keys)
             try:
                 self.rq.redis.hexpire(dict_name, timeout, *keys)
                 return True
