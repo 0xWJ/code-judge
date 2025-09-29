@@ -7,13 +7,13 @@ import subprocess
 import multiprocessing
 from time import sleep
 
-REDIS_PORT = 6388
+REDIS_PORT = 6301
 
 if os.environ.get('REDIS_URI') is None:
     os.environ['REDIS_URI'] = f'redis://localhost:{REDIS_PORT}/7'
 
 os.environ['RUN_WORKERS'] = '0'
-os.environ['MAX_WORKERS'] = '4'
+os.environ['MAX_WORKERS'] = '1'
 
 
 @pytest.fixture(scope='session')

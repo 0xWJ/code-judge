@@ -100,6 +100,7 @@ async def judge_batch(batch_sub: BatchSubmission):
 async def judge_batch(batch_sub: BatchSubmission):
     return BatchJudgeResult.from_submission_result(await _judge_batch(redis_queue, batch_sub, long_batch=True))
 
+
 @app.get('/status')
 async def status():
     return {

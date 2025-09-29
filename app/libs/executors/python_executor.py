@@ -77,13 +77,13 @@ _exec_end()
 
 class PythonExecutor(ScriptExecutor):
     def __init__(self, run_cl: str, timeout: int = None, memory_limit: int = None):
-        self.timeout = timeout
         self.memory_limit = (
             memory_limit + 128 * 1024 * 1024  # extra 128MB for python overhead
             if memory_limit
             else None
         )
         self.run_cl = run_cl
+        super().__init__(timeout)
 
     def setup_command(self, tmp_path: str, script: str):
         source_path = f"{tmp_path}/source.py"

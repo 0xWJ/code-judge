@@ -20,6 +20,7 @@ class ProcessExecuteResult:
     exit_code: int
     cost: float # in seconds
     success: bool = field(init=False)
+    session: str | None = None
 
     def __post_init__(self):
         self.success = self.exit_code == 0
@@ -78,6 +79,7 @@ COMPILE_ERROR_EXIT_CODE = -102
 
 class ProcessExecutor:
     def execute(self, command_args: list[str], cwd=None, stdin: str | None = None, timeout: float | None = None) -> ProcessExecuteResult:
+        print(command_args)
         time_start = time.perf_counter()
         try:
             std_input = stdin.encode() if stdin else None
@@ -101,6 +103,10 @@ class ProcessExecutor:
 
 
 class ScriptExecutor(ProcessExecutor):
+    def __init__(self, timeout: int = None):
+        self.timeout = timeout
+        super().__init__()
+
     def setup_command(self, tmp_path: str, script: str) -> Generator[list[str], ProcessExecuteResult, None]:
         """
         Prepare the command to execute the script
@@ -112,6 +118,7 @@ class ScriptExecutor(ProcessExecutor):
 
     def execute_script(self, script: str, stdin: str | None = None, timeout: float | None = None) -> ProcessExecuteResult:
         # add 1 second to timeout as the overhead of the pre/post processing
+        timeout = self.timeout if timeout is None else timeout
         timeout = timeout + 1 if timeout else None
 
         with tempfile.TemporaryDirectory() as tmp_path:

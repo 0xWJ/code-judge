@@ -54,8 +54,8 @@ class CppExecutor(ScriptExecutor):
     def __init__(self, compiler_cl: str, run_cl:str, timeout: int = None, memory_limit: int = None):
         self.compiler_cl = compiler_cl
         self.run_cl = run_cl
-        self.timeout = timeout
         self.memory_limit = memory_limit
+        super().__init__(timeout)
 
     def setup_command(self, tmp_path: str, script: str) -> Generator[list[str], ProcessExecuteResult, None]:
         source_path = f"{tmp_path}/source.cpp"

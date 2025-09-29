@@ -104,10 +104,23 @@ class RedisQueue:
             else:
                 return self._peak_sync(queue_name)
 
+        async def peak_multi(self, *queue_names) -> list[tuple[bytes, float]]:
+            assert self.rq.is_async, "peak_multi is only available in async mode"
+            if not queue_names:
+                return []
+            pp = self.rq.redis.pipeline(transaction=False)
+            for queue_name in queue_names:
+                pp.zrange(queue_name, 0, 0, withscores=True)
+            result = []
+            for r in await pp.execute():
+                if r:
+                    result.append(r[0])
+            return result
+
         def push(self, queue_name, key_score_dict: dict[str, float]):
             return self.rq.redis.zadd(queue_name, key_score_dict)
 
-        def pop(self, queue_name)-> tuple[bytes, float] | Awaitable[tuple[bytes, float]] | None | Awaitable[None]:
+        def pop(self, queue_name)-> list[tuple[bytes, float]] | Awaitable[list[tuple[bytes, float]]]:
             return self.rq.redis.zpopmin(queue_name)
 
         def pop_multi(self, *queue_names):
@@ -150,6 +163,50 @@ class RedisQueue:
         def len(self, queue_name):
             return self.rq.redis.zcard(queue_name)
 
+    class DictOp:
+        """Dict operations using hash in Redis"""
+
+        def __init__(self, rq: 'RedisQueue'):
+            self.rq = rq
+
+        def set(self, dict_name, key, value):
+            return self.rq.redis.hset(dict_name, key, value)
+
+        def get(self, dict_name, key):
+            return self.rq.redis.hget(dict_name, key)
+
+        def get_all(self, dict_name):
+            return self.rq.redis.hgetall(dict_name)
+
+        def get_keys(self, dict_name):
+            return self.rq.redis.hkeys(dict_name)
+
+        def delete(self, dict_name, *keys):
+            return self.rq.redis.hdel(dict_name, *keys)
+
+        def len(self, dict_name):
+            return self.rq.redis.hlen(dict_name)
+
+        def keys(self, dict_name):
+            return self.rq.redis.hkeys(dict_name)
+
+        def expire(self, dict_name, timeout, *keys):
+            try:
+                self.rq.redis.hexpire(dict_name, timeout, *keys)
+                return True
+            except redis.exceptions.ResponseError:
+                return False  # not supported in some redis versions
+
+        async def len_multi(self, *dict_names) -> list[int]:
+            assert self.rq.is_async, "len_multi is only available in async mode"
+            if not dict_names:
+                return []
+            pp = self.rq.redis.pipeline(transaction=False)
+            for dict_name in dict_names:
+                pp.hlen(dict_name)
+            result = await pp.execute()
+            return result
+
     def __init__(self, redis_uri, *, socket_timeout: int = None, is_async: bool = False):
         self.redis_uri = redis_uri
         self.is_async = is_async
@@ -159,6 +216,7 @@ class RedisQueue:
         self.redis: redis.Redis | redis.asyncio.Redis = self._init_redis(socket_timeout)
         self.queue = self.QueueOp(self)
         self.pqueue = self.PriorityQueueOp(self)
+        self.dict = self.DictOp(self)
 
     def _init_redis(self, socket_timeout) -> redis.Redis | redis.asyncio.Redis:
         if '+cluster://' in self.redis_uri:

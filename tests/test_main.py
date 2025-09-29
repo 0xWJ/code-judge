@@ -324,3 +324,56 @@ with open('../test.txt', 'w') as f:
     assert response.status_code == 200
 
     print(f"Jailbreak Status (Is sandbox enabled): {not Path('/tmp/test.txt').exists()}")
+
+
+def test_session(test_client):
+    # start a new session
+    response = test_client.post('/run', json={
+        'type': 'python',
+        "solution": "",
+        "session": 'jupyter:new',
+    })
+    resp = response.json()
+    print(resp)
+    assert response.status_code == 200
+    session = resp['session']
+    assert session.startswith('jupyter:')
+
+    code = """
+a = 100
+print(a)
+"""
+    # run code in the session
+    response = test_client.post('/run', json={
+        'type': 'python',
+        'session': session,
+        'solution': code,
+    })
+    print(response.json())
+    assert response.status_code == 200
+    assert response.json()['run_success']
+    assert response.json()['stdout'].strip() == '100'
+
+    code = """
+a += 1
+print(a)
+"""
+    # run code in the session
+    response = test_client.post('/run', json={
+        'type': 'python',
+        'session': session,
+        'solution': code,
+    })
+    print(response.json())
+    assert response.status_code == 200
+    assert response.json()['run_success']
+    assert response.json()['stdout'].strip() == '101'
+
+    # close the session
+    response = test_client.post('/session', json={
+        'type': 'jupyter',
+        'session': session + '#close'
+    })
+    print(response.json())
+    assert response.status_code == 200
+    assert response.json()['success']

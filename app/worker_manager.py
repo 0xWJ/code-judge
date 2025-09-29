@@ -16,6 +16,7 @@ from app.libs.executors.executor import ProcessExecuteResult
 from app.model import Submission, SubmissionResult, WorkPayload, ResultReason
 from app.libs.executors.python_executor import PythonExecutor, ScriptExecutor
 from app.libs.executors.cpp_executor import CppExecutor
+from app.libs.executors.session_executor import SessionExecutor
 from app.libs.executors.executor import TIMEOUT_EXIT_CODE
 import app.config as app_config
 from app.work_queue import connect_queue
@@ -48,14 +49,25 @@ def save_error_case(sub: Submission, result: ProcessExecuteResult | None = None,
         logger.exception(f'Failed to save error case for submission {sub.sub_id}')
 
 
-def executor_factory(type: str) -> ScriptExecutor:
+def executor_factory(redis_queue, type: str, session: str = None) -> ScriptExecutor:
     if type == 'python':
+        if session:
+            return SessionExecutor(
+                redis_queue=redis_queue,
+                session_initiator_cl=app_config.SESSION_INITIATOR_COMMAND,
+                run_cl=app_config.PYTHON_EXECUTE_COMMAND,
+                session=session,
+                timeout=app_config.MAX_EXECUTION_TIME,
+                memory_limit=app_config.MAX_MEMORY * 1024 * 1024,
+            )
         return PythonExecutor(
             run_cl=app_config.PYTHON_EXECUTE_COMMAND,
             timeout=app_config.MAX_EXECUTION_TIME,
             memory_limit=app_config.MAX_MEMORY * 1024 * 1024,
         )
     elif type == 'cpp':
+        if session is not None:
+            raise ValueError('Session is not supported for CppExecutor')
         return CppExecutor(
             compiler_cl=app_config.CPP_COMPILE_COMMAND,
             run_cl=app_config.CPP_EXECUTE_COMMAND,
@@ -66,9 +78,9 @@ def executor_factory(type: str) -> ScriptExecutor:
         raise ValueError(f'Unsupported type: {type}')
 
 
-def judge(sub: Submission):
+def judge(redis_queue, sub: Submission):
     try:
-        executor = executor_factory(sub.type)
+        executor = executor_factory(redis_queue, sub.type, sub.session)
         result = executor.execute_script(sub.solution, sub.input)
 
         success = result.success
@@ -80,6 +92,7 @@ def judge(sub: Submission):
         sub_result = SubmissionResult(
             sub_id=sub.sub_id, success=success, cost=result.cost,
             run_success=run_success,
+            session=result.session,
             # only save stdout and stderr if expected_output is None
             stdout=result.stdout[:app_config.MAX_STDOUT_ERROR_LENGTH]
                 if result.stdout is not None else None,
@@ -87,7 +100,7 @@ def judge(sub: Submission):
                 if result.stderr is not None else None,
             reason=ResultReason.WORKER_TIMEOUT
                 if result.exit_code == TIMEOUT_EXIT_CODE
-                else ResultReason.UNSPECIFIED
+                else ResultReason.UNSPECIFIED,
         )
     except Exception as e:
         logger.exception(f'Worker failed to judge submission {sub.sub_id}')
@@ -112,11 +125,15 @@ class Worker(Process):
         while True:
             # register worker id
             redis_queue.set(
-                f'{app_config.REDIS_WORKER_ID_PREFIX}{worker_id}',
+                f'{app_config.REDIS_WORKER_ID_PREFIX}{app_config.MACHINE_ID}:{worker_id}',
                 1,
                 app_config.REDIS_WORKER_REGISTER_EXPIRE
             )
-            work_item = redis_queue.pqueue.block_pop(app_config.REDIS_WORK_QUEUE_NAME, timeout=app_config.REDIS_WORK_QUEUE_BLOCK_TIMEOUT)
+            work_item = redis_queue.pqueue.block_pop(
+                app_config.REDIS_SESSION_MACHINE_QUEUE_NAME,
+                app_config.REDIS_WORK_QUEUE_NAME,
+                timeout=app_config.REDIS_WORK_QUEUE_BLOCK_TIMEOUT
+            )
             if not work_item:
                 continue
             _, payload_json, _ = work_item
@@ -133,7 +150,7 @@ class Worker(Process):
                     logger.warning(f'Work {payload.work_id} lifetime ({lifetime:.2f}>{app_config.MAX_QUEUE_WORK_LIFE_TIME}) timed out. '
                                 f'Ignored. Concurrency is too hight?')
                     continue
-                result = judge(payload.submission)
+                result = judge(redis_queue, payload.submission)
             except ValidationError:
                 logger.exception(f'Failed to parse payload {payload_json}')
                 try:
@@ -191,6 +208,8 @@ class Worker(Process):
 
 class WorkerManager:
     def __init__(self):
+        self.redis_queue = connect_queue(False)
+        self._register_machine()
         max_workers = app_config.MAX_WORKERS
         self.workers: list[Worker] = []
         logger.info(f'Starting {max_workers} workers...')
@@ -200,13 +219,28 @@ class WorkerManager:
             self.workers.append(worker)
         logger.info(f'Started {max_workers} workers')
 
+    def _register_machine(self):
+        # register machine
+        self.redis_queue.dict.set(
+            app_config.REDIS_MACHINE_IDS,
+            app_config.MACHINE_ID,
+            time(),
+        )
+        self.redis_queue.dict.expire(
+            app_config.REDIS_MACHINE_IDS,
+            app_config.REDIS_MACHINE_REGISTER_EXPIRE,
+            app_config.MACHINE_ID
+        )
+
     def run(self):
         while True:
             try:
-                logger.info('Checking workers...')
+                self._register_machine()
+                logger.info('Checking workers and sessions...')
                 self._check_workers()
+                self._check_sessions()
             except Exception as e:
-                logger.exception(f'Check worker failed. Will retry in 60 seconds...')
+                logger.exception(f'Check failed. Will retry in 30 seconds...')
             sleep(30)
 
     def run_background(self):
@@ -249,3 +283,51 @@ class WorkerManager:
                     logger.exception(f'Failed to check worker {worker.pid}')
 
         logger.info(f'Total: {len(self.workers)}, free: {len(self.workers) - busy_workers} failed: {failed_workers}, busy: {busy_workers}, hanged: {hanged_workers}')
+
+    def _check_sessions(self):
+        timeout_sessions = 0
+        inactive_sessions = 0
+        active_sessions = 0
+
+        sessions = self.redis_queue.dict.get_all(app_config.REDIS_SESSION_MACHINE_SESSIONS_NAME)
+
+        for session_id, session in sessions.items():
+            session = json.loads(session)
+            create_time = session['create_time']
+            pid = session['pid']
+            active = session['active']
+
+            try:
+                session_process = psutil.Process(pid)
+            except psutil.NoSuchProcess:
+                session_process = None
+
+            if not session_process or not session_process.is_running() or session_process.create_time() != create_time:
+                # session process is already gone
+                self.redis_queue.dict.delete(
+                    app_config.REDIS_SESSION_MACHINE_SESSIONS_NAME, session_id
+                )
+                continue
+
+            if not active or time() - create_time > app_config.MAX_SESSION_TIME:
+                if not active:
+                    logger.info(f'Session {session_id} is inactive. Terminating...')
+                    inactive_sessions += 1
+                else:
+                    logger.info(f'Session {session_id} timed out. Terminating...')
+                    timeout_sessions += 1
+                nothrow_killpg(pid=pid)
+                try:
+                    # it should have been terminated by now
+                    # let's wait to avoid zombie process
+                    session_process.wait(timeout=0.1)
+                    self.redis_queue.dict.delete(
+                        app_config.REDIS_SESSION_MACHINE_SESSIONS_NAME, session_id
+                    )
+                except Exception:
+                    # will try in future
+                    pass
+            else:
+                active_sessions += 1
+
+        logger.info(f'Sessions: active: {active_sessions}, inactive: {inactive_sessions}, expired: {timeout_sessions}')
