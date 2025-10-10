@@ -84,10 +84,11 @@ REDIS_SESSION_MACHINE_QUEUE_NAME = REDIS_SESSION_MACHINE_QUEUE_NAME_TEMPLATE.for
 REDIS_SESSION_MACHINE_SESSIONS_NAME = REDIS_SESSION_MACHINE_SESSIONS_TEMPLATE.format(MACHINE_ID)
 
 # We will set redis key expire time for session (last resort)
-REDIS_SESSION_EXPIRE = int(env('REDIS_SESSION_EXPIRE', 6 * 3600))  # default 6 hours
+# This only works in latest versions of redis
+REDIS_SESSION_EXPIRE = int(env('REDIS_SESSION_EXPIRE', 3600))  # default 1 hour
 # The max session time we allow, must be smaller than REDIS_SESSION_EXPIRE
-# So we have chance to clean up the session in redis
-MAX_SESSION_TIME = int(env('MAX_SESSION_TIME', REDIS_SESSION_EXPIRE / 2))  # default 3 hours
+# So we have chance to clean up the session manually
+MAX_SESSION_TIME = int(env('MAX_SESSION_TIME', REDIS_SESSION_EXPIRE / 2))  # default 30 minutes
 
 # we use socket timeout to avoid blocking forever if a bad connection is used
 REDIS_SOCKET_TIMEOUT = int(env('REDIS_SOCKET_TIMEOUT', 60)) # default 1 minute

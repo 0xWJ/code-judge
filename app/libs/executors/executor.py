@@ -79,7 +79,6 @@ COMPILE_ERROR_EXIT_CODE = -102
 
 class ProcessExecutor:
     def execute(self, command_args: list[str], cwd=None, stdin: str | None = None, timeout: float | None = None) -> ProcessExecuteResult:
-        print(command_args)
         time_start = time.perf_counter()
         try:
             std_input = stdin.encode() if stdin else None

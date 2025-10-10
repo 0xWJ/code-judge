@@ -78,6 +78,8 @@ try:
 except TimeoutError:
     km.shutdown_kernel()
     raise
+else:
+    kc.stop_channels()
 
 connection_info = km.get_connection_info()
 print(connection_info, flush=True)
@@ -102,9 +104,10 @@ def execute_code_in_existing_kernel(code):
     kc = BlockingKernelClient()
     kc.load_connection_info({connection_info})
 
-    if not kc.is_alive():
-        print("Kernel is not alive", file=sys.stderr)
-        exit(1)
+    # this check is not reliable
+    # if not kc.is_alive():
+    #     print("Kernel is not alive", file=sys.stderr)
+    #     exit(1)
 
     kc.start_channels()
 
@@ -204,7 +207,6 @@ class SessionExecutor(PythonExecutor):
             session_info_json = self.redis.dict.get(
                 app_config.REDIS_SESSION_MACHINE_SESSIONS_NAME, self.session_id
             )
-            print(session_info_json)
             if not session_info_json:
                 raise ValueError("Session not found")
 
@@ -216,21 +218,11 @@ class SessionExecutor(PythonExecutor):
             session_process = psutil.Process(pid)  # check if the process is alive
             if not session_process.is_running() or session_process.create_time() != session_info['create_time']:
                 raise ValueError("Session process is not running")
-            print(session_process)
             if self.session_action == 'close':
                 script_to_run = runner.gen_stop(session_info, timeout=self.timeout) if runner else script
             else:
                 script_to_run = runner.gen_run(session_info, cell_source_path, timeout=self.timeout) if runner else script
             yield from super().setup_command(tmp_path, script_to_run)
-            # print(script_to_run)
-            # with open(source_path, mode='w') as f:
-            #     f.write(script_to_run)
-            #     f.flush()
-
-            # yield shlex.split(self.run_cl.format(
-            #     source=shlex.quote(source_path),
-            #     workdir=shlex.quote(str(tmp_path))
-            # ))
 
     def process_result(self, result):
         result = super().process_result(result)

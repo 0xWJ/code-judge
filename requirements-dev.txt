@@ -7,3 +7,4 @@ tox
 tox-uv
 coverage
 pytest-cov
+fakeredis
